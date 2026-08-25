@@ -42,6 +42,15 @@ describe("calculateWorkedMinutes", () => {
       }),
     ).toBe(0);
   });
+
+  it("смена через полночь: 22:00 → 06:00 следующего дня = 480 минут", () => {
+    expect(
+      calculateWorkedMinutes({
+        startTime: at("2024-01-16T22:00:00.000Z"),
+        endTime: at("2024-01-17T06:00:00.000Z"),
+      }),
+    ).toBe(480);
+  });
 });
 
 describe("calculateMonthBalance", () => {

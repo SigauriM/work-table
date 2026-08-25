@@ -1,3 +1,5 @@
+import { shiftsRouter } from "./modules/shifts/shifts.routes.js";
+import { sickdaysRouter } from "./modules/sickdays/sickdays.routes.js";
 import express from "express";
 import { env } from "./config/env.js";
 import { prisma } from "./config/prisma.js";
@@ -19,6 +21,8 @@ app.get("/health", async (_req, res) => {
 
 app.use("/auth", authRouter);
 app.use("/employees", employeesRouter);
+app.use("/shifts", shiftsRouter);
+app.use("/sick-days", sickdaysRouter);
 app.use(errorHandler);
 
 app.listen(env.port, "0.0.0.0", () => {
