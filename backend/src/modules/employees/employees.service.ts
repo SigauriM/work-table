@@ -107,41 +107,51 @@ export async function createEmployee(input: CreateInput) {
 }
 
 export async function updateEmployee(id: string, input: UpdateInput) {
-  const existing = await prisma.employee.findUnique({ where: { id } });
-  if (!existing) {
-    throw new HttpError(404, "Not found");
-  }
-
-  const data: Prisma.EmployeeUpdateInput = {};
-  if (input.firstName !== undefined) data.firstName = input.firstName;
-  if (input.lastName !== undefined) data.lastName = input.lastName;
-  if (input.hoursPerDay !== undefined) data.hoursPerDay = input.hoursPerDay;
-  if (input.daysPerWeek !== undefined) data.daysPerWeek = input.daysPerWeek;
-  if (input.hoursPerMonth !== undefined) data.hoursPerMonth = input.hoursPerMonth;
-  if (input.hiredAt !== undefined) data.hiredAt = input.hiredAt;
-  if (input.isActive !== undefined) data.isActive = input.isActive;
-
-  if (input.payType !== undefined) {
-    const payType = input.payType as PayType;
-    data.payType = payType;
-    if (payType === PayType.HOURLY) {
-      data.hourlyRate = input.hourlyRate;
-      data.monthlySalary = null;
-    } else {
-      data.monthlySalary = input.monthlySalary;
-      data.hourlyRate = null;
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.employee.findUnique({ where: { id } });
+    if (!existing) {
+      throw new HttpError(404, "Not found");
     }
-  } else {
-    if (input.hourlyRate !== undefined) data.hourlyRate = input.hourlyRate;
-    if (input.monthlySalary !== undefined) data.monthlySalary = input.monthlySalary;
-  }
 
-  const employee = await prisma.employee.update({
-    where: { id },
-    data,
-    include: publicInclude,
+    const data: Prisma.EmployeeUpdateInput = {};
+    if (input.firstName !== undefined) data.firstName = input.firstName;
+    if (input.lastName !== undefined) data.lastName = input.lastName;
+    if (input.hoursPerDay !== undefined) data.hoursPerDay = input.hoursPerDay;
+    if (input.daysPerWeek !== undefined) data.daysPerWeek = input.daysPerWeek;
+    if (input.hoursPerMonth !== undefined) data.hoursPerMonth = input.hoursPerMonth;
+    if (input.hiredAt !== undefined) data.hiredAt = input.hiredAt;
+    if (input.isActive !== undefined) data.isActive = input.isActive;
+
+    if (input.payType !== undefined) {
+      const payType = input.payType as PayType;
+      data.payType = payType;
+      if (payType === PayType.HOURLY) {
+        data.hourlyRate = input.hourlyRate;
+        data.monthlySalary = null;
+      } else {
+        data.monthlySalary = input.monthlySalary;
+        data.hourlyRate = null;
+      }
+    } else {
+      if (input.hourlyRate !== undefined) data.hourlyRate = input.hourlyRate;
+      if (input.monthlySalary !== undefined) data.monthlySalary = input.monthlySalary;
+    }
+
+    const employee = await tx.employee.update({
+      where: { id: existing.id },
+      data,
+      include: publicInclude,
+    });
+
+    if (input.isActive === false) {
+      await tx.refreshToken.updateMany({
+        where: { userId: existing.userId },
+        data: { revokedAt: new Date() },
+      });
+    }
+
+    return toPublic(employee);
   });
-  return toPublic(employee);
 }
 
 export async function deactivateEmployee(id: string) {
