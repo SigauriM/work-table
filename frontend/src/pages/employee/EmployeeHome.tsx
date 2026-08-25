@@ -261,6 +261,7 @@ export default function EmployeeHome() {
             <li>Norm: {stats.normHours} h</li>
             <li>Balance: {stats.balance} h</li>
             <li>Pay: {stats.monthlyPay}</li>
+            <li className="col-span-2">Paid overtime: {stats.paidOvertimeHours} h</li>
             <li className="col-span-2">Total balance: {stats.totalBalance} h</li>
           </ul>
         ) : (

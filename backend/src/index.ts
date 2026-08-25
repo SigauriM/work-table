@@ -1,3 +1,4 @@
+import { payoutsRouter } from "./modules/payouts/payouts.routes.js";
 import { statsRouter } from "./modules/stats/stats.routes.js";
 import { shiftsRouter } from "./modules/shifts/shifts.routes.js";
 import { sickdaysRouter } from "./modules/sickdays/sickdays.routes.js";
@@ -31,6 +32,7 @@ app.use("/employees", employeesRouter);
 app.use("/shifts", shiftsRouter);
 app.use("/sick-days", sickdaysRouter);
 app.use(statsRouter);
+app.use(payoutsRouter);
 app.use((_req, res) => {
   res.status(404).json({ error: "Not found" });
 });

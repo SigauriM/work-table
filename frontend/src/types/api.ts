@@ -127,3 +127,37 @@ export type CreateSickDayBody = {
   date: string;
   note?: string;
 };
+
+export type OvertimePayout = {
+  id: string;
+  employeeId: string;
+  date: string;
+  hoursPaid: string;
+  amount: string;
+  note: string | null;
+};
+
+export type SalaryPayout = {
+  id: string;
+  employeeId: string;
+  year: number;
+  month: number;
+  amount: string;
+  paidAt: string;
+  note: string | null;
+};
+
+export type CreateOvertimePayoutBody = {
+  date: string;
+  hoursPaid: string;
+  amount: string;
+  note?: string;
+};
+
+export type CreateSalaryPayoutBody = {
+  year: number;
+  month: number;
+  amount: string;
+  paidAt: string;
+  note?: string;
+};
