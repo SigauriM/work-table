@@ -24,4 +24,22 @@ It must be fixed before production (frontend / phones will enter times around th
 Logical place: stage 8 or a small pre-deploy step.
 
 Unlike overnight shifts (a functional limitation with a defined rule),
-UTC vs Berlin is a **production blocker**, not just reduced feature scope.
+UTC vs Berlin is a **production blocker**, not just reduced feature scope.  
+  
+## hoursPerMonth changes rewrite history
+
+Month balances in stats always use the employee's *current* `hoursPerMonth`.
+
+There is no per-month norm history. If an admin changes `hoursPerMonth`,
+
+past months' balances in `/stats` recalculate with the new norm.
+
+## hiredAt month boundary uses UTC
+
+The "month of hire" for stats 404 / overview inclusion is derived from `hiredAt` in UTC
+
+(same class of issue as UTC vs Europe/Berlin). A Berlin local midnight hire date
+
+stored with a non-Z offset can shift the hire month. Prefer storing hire dates as
+
+UTC midnight calendar dates until timezone handling is fixed.

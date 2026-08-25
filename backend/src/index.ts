@@ -1,3 +1,4 @@
+import { statsRouter } from "./modules/stats/stats.routes.js";
 import { shiftsRouter } from "./modules/shifts/shifts.routes.js";
 import { sickdaysRouter } from "./modules/sickdays/sickdays.routes.js";
 import express from "express";
@@ -23,6 +24,7 @@ app.use("/auth", authRouter);
 app.use("/employees", employeesRouter);
 app.use("/shifts", shiftsRouter);
 app.use("/sick-days", sickdaysRouter);
+app.use(statsRouter);
 app.use(errorHandler);
 
 app.listen(env.port, "0.0.0.0", () => {
