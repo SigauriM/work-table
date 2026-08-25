@@ -1,0 +1,11 @@
+node_modules
+dist
+.env
+*.log
+
+backend/login.json
+backend/login-ivan.json
+backend/refresh.json
+backend/refresh-ivan.json
+backend/create-emp.json
+backend/patch-*.json

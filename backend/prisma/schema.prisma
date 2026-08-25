@@ -1,0 +1,117 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  EMPLOYEE
+}
+
+enum PayType {
+  HOURLY
+  SALARY
+}
+
+model User {
+  id            String         @id @default(uuid())
+  login         String         @unique
+  passwordHash  String
+  role          Role           @default(EMPLOYEE)
+  employee      Employee?
+  refreshTokens RefreshToken[]
+  createdAt     DateTime       @default(now())
+}
+
+model Employee {
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id])
+  firstName      String
+  lastName       String
+  payType        PayType
+  hourlyRate     Decimal? @db.Decimal(10, 2)
+  monthlySalary  Decimal? @db.Decimal(10, 2)
+  hoursPerDay    Decimal  @db.Decimal(4, 2)
+  daysPerWeek    Int
+  hoursPerMonth  Decimal  @db.Decimal(6, 2)
+  hiredAt        DateTime
+  isActive       Boolean  @default(true)
+
+  shifts          Shift[]
+  sickDays        SickDay[]
+  overtimePayouts OvertimePayout[]
+  salaryPayouts   SalaryPayout[]
+
+  @@index([isActive])
+}
+
+model Shift {
+  id            String   @id @default(uuid())
+  employeeId    String
+  employee      Employee @relation(fields: [employeeId], references: [id])
+  date          DateTime @db.Date
+  startTime     DateTime
+  endTime       DateTime
+  breakStart    DateTime?
+  breakEnd      DateTime?
+  workedMinutes Int
+  note          String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([employeeId, date])
+}
+
+model SickDay {
+  id            String   @id @default(uuid())
+  employeeId    String
+  employee      Employee @relation(fields: [employeeId], references: [id])
+  date          DateTime @db.Date
+  creditedHours Decimal  @db.Decimal(4, 2)
+  note          String?
+
+  @@unique([employeeId, date])
+  @@index([employeeId, date])
+}
+
+model OvertimePayout {
+  id         String   @id @default(uuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  date       DateTime @db.Date
+  hoursPaid  Decimal  @db.Decimal(6, 2)
+  amount     Decimal  @db.Decimal(10, 2)
+  note       String?
+
+  @@index([employeeId, date])
+}
+
+model SalaryPayout {
+  id         String   @id @default(uuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  year       Int
+  month      Int
+  amount     Decimal  @db.Decimal(10, 2)
+  paidAt     DateTime
+  note       String?
+
+  @@unique([employeeId, year, month])
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
