@@ -284,7 +284,9 @@ export default function EmployeeHome() {
                   <div>
                     {d} {a}–{b}
                   </div>
-                  <div className="text-neutral-600">{s.workedMinutes} min</div>
+                  <div className="text-neutral-600">
+                    {(s.workedMinutes / 60).toFixed(1)} h
+                  </div>
                   {s.note ? <div className="text-neutral-600">{s.note}</div> : null}
                 </div>
                 <div className="flex shrink-0 gap-2">

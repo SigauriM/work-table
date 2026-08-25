@@ -44,6 +44,7 @@ stored with a non-Z offset can shift the hire month. Prefer storing hire dates a
 
 UTC midnight calendar dates until timezone handling is fixed.  
   
+
 ## Frontend stage 8: form times are UTC
 
 Shift and sick-day date/time fields in the UI are interpreted as UTC and sent with a `Z` suffix
@@ -56,4 +57,14 @@ Example: entering `22:00` means 22:00 UTC, not 22:00 Europe/Berlin
 
 This matches current backend month boundaries. Replacing UTC with Berlin timezone
 
-is still required before production.
+is still required before production.  
+  
+## Refresh tokens are not rotated
+
+`POST /auth/refresh` verifies the refresh token and issues a new access token.
+
+It does not revoke the refresh token or replace it.
+
+Revoke still happens on logout and on employee deactivation `DELETE` / `PATCH isActive: false`).
+
+Reason: refresh rotation lost the new token if the tab reloaded before the response was stored (F5 spam). Reuse until expiry is the v1 tradeoff; stolen refresh remains valid until logout, deactivation, or expiry (7 days).

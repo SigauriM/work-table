@@ -250,7 +250,8 @@ export default function EmployeeDetail() {
               <div>
                 {isoToUtcDateTimeParts(s.date).date}{" "}
                 {isoToUtcDateTimeParts(s.startTime).time}–
-                {isoToUtcDateTimeParts(s.endTime).time} · {s.workedMinutes} min
+                {isoToUtcDateTimeParts(s.endTime).time} ·{" "}
+                {(s.workedMinutes / 60).toFixed(1)} h
               </div>
               <button type="button" className="underline" onClick={() => void onDeleteShift(s.id)}>
                 Del

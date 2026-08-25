@@ -90,7 +90,7 @@ export async function login(loginName: string, password: string) {
   return { accessToken, refreshToken, user: toPublicUser(user) };
 }
 
-async function consumeRefreshToken(raw: string) {
+async function verifyRefreshToken(raw: string) {
   const { id, secret } = parseRefreshToken(raw);
   const row = await prisma.refreshToken.findUnique({ where: { id } });
   const tokenHash = row?.tokenHash ?? (await bcrypt.hash("dummy", BCRYPT_ROUNDS));
@@ -103,6 +103,11 @@ async function consumeRefreshToken(raw: string) {
   ) {
     throw new HttpError(401, AUTH_FAILED);
   }
+  return row;
+}
+
+async function consumeRefreshToken(raw: string) {
+  const row = await verifyRefreshToken(raw);
   await prisma.refreshToken.update({
     where: { id: row.id },
     data: { revokedAt: new Date() },
@@ -111,9 +116,9 @@ async function consumeRefreshToken(raw: string) {
 }
 
 export async function refresh(rawRefreshToken: string) {
-  const userId = await consumeRefreshToken(rawRefreshToken);
+  const row = await verifyRefreshToken(rawRefreshToken);
   const user = await prisma.user.findUnique({
-    where: { id: userId },
+    where: { id: row.userId },
     include: userWithEmployee,
   });
   if (!user) {
@@ -121,8 +126,7 @@ export async function refresh(rawRefreshToken: string) {
   }
   assertEmployeeActive(user);
   const accessToken = issueAccessToken(user);
-  const refreshToken = await issueRefreshToken(user.id);
-  return { accessToken, refreshToken, user: toPublicUser(user) };
+  return { accessToken, refreshToken: rawRefreshToken, user: toPublicUser(user) };
 }
 
 export async function logout(rawRefreshToken: string) {
