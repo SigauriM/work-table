@@ -115,6 +115,17 @@ async function consumeRefreshToken(raw: string) {
   return row.userId;
 }
 
+/**
+ * v1 does **not** rotate refresh tokens (Stage 3 did; that was dropped).
+ *
+ * Verifies the existing refresh row and returns a new access token plus the
+ * same refresh string. Does not revoke this row. Revoke is logout / deactivate.
+ *
+ * Rotation was removed because F5 during the response stored the old token in
+ * the browser after the server had already consumed the new one. See
+ * LIMITATIONS.md. If rotation is restored, re-test PWA auto-update: old and new
+ * shells must not race-consume the refresh token.
+ */
 export async function refresh(rawRefreshToken: string) {
   const row = await verifyRefreshToken(rawRefreshToken);
   const user = await prisma.user.findUnique({

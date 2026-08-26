@@ -18,6 +18,7 @@ authRouter.post("/login", async (req, res, next) => {
   }
 });
 
+// Does not rotate: new access + same refresh. See auth.service refresh() and LIMITATIONS.md.
 authRouter.post("/refresh", async (req, res, next) => {
   try {
     const body = refreshSchema.parse(req.body);

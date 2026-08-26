@@ -8,11 +8,10 @@ import {
 import type { AuthResponse } from "../types/api";
 
 export class ApiError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-  ) {
+  status: number;
+  constructor(status: number, message: string) {
     super(message);
+    this.status = status;
   }
 }
 
@@ -27,7 +26,9 @@ async function parseError(res: Response): Promise<ApiError> {
 
 let refreshInFlight: Promise<AuthResponse | null> | null = null;
 
-/** Один POST /auth/refresh на всех; параллельные вызовы ждут тот же Promise */
+/** Один POST /auth/refresh на всех; параллельные вызовы ждут тот же Promise.
+ * Нужен и для PWA: старый и новый бандл не должны параллельно гасить refresh,
+ * если ротацию когда-нибудь вернут (сейчас бэк отдаёт тот же refresh). */
 export function refreshSession(): Promise<AuthResponse | null> {
   if (refreshInFlight) return refreshInFlight;
 

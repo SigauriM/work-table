@@ -70,6 +70,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (!ready) return;
+    void import("../pwa").then((mod) => mod.registerPwa());
+  }, [ready]);
+
   const login = useCallback(async (loginName: string, password: string) => {
     const data = await apiFetch<AuthResponse>("/api/auth/login", {
       method: "POST",

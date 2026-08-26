@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { btnPrimary, inputClass } from "../ui";
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -36,7 +37,7 @@ export default function LoginPage() {
         <label className="flex flex-col gap-1 text-sm">
           Login
           <input
-            className="rounded border border-neutral-300 px-3 py-3 text-base"
+            className={inputClass}
             name="login"
             autoComplete="username"
             value={loginName}
@@ -49,7 +50,7 @@ export default function LoginPage() {
         <label className="flex flex-col gap-1 text-sm">
           Password
           <input
-            className="rounded border border-neutral-300 px-3 py-3 text-base"
+            className={inputClass}
             name="password"
             type="password"
             autoComplete="current-password"
@@ -69,7 +70,7 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={pending}
-          className="rounded bg-neutral-900 px-3 py-3 text-base text-white disabled:opacity-50"
+          className={btnPrimary}
         >
           {pending ? "Signing in…" : "Sign in"}
         </button>

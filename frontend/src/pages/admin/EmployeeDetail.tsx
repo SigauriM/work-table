@@ -13,7 +13,11 @@ import {
   listOvertimePayouts,
   listSalaryPayouts,
 } from "../../api/payouts";
-import { useAuth } from "../../auth/AuthContext";
+import { AppShell, adminNav } from "../../components/AppShell";
+import { MonthPicker, TabBar } from "../../components/MonthPicker";
+import { ShiftList } from "../../components/ShiftList";
+import { StatsBlock } from "../../components/StatsBlock";
+import { useYearMonth } from "../../hooks/useYearMonth";
 import { isoToUtcDateTimeParts, utcDateToIso } from "../../lib/datetime";
 import type {
   Employee,
@@ -23,18 +27,14 @@ import type {
   Shift,
   SickDay,
 } from "../../types/api";
+import { btnPrimary, btnSecondary, inputClass } from "../../ui";
 
-function defaultYearMonth() {
-  const now = new Date();
-  return { year: now.getUTCFullYear(), month: now.getUTCMonth() + 1 };
-}
+type Tab = "profile" | "month" | "payouts";
 
 export default function EmployeeDetail() {
   const { id } = useParams<{ id: string }>();
-  const { logout } = useAuth();
-  const initial = defaultYearMonth();
-  const [year, setYear] = useState(initial.year);
-  const [month, setMonth] = useState(initial.month);
+  const { year, month, setYearMonth } = useYearMonth();
+  const [tab, setTab] = useState<Tab>("month");
 
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [stats, setStats] = useState<EmployeeStats | null>(null);
@@ -54,8 +54,8 @@ export default function EmployeeDetail() {
   const [otNote, setOtNote] = useState("");
   const [otPending, setOtPending] = useState(false);
 
-  const [salYear, setSalYear] = useState(initial.year);
-  const [salMonth, setSalMonth] = useState(initial.month);
+  const [salYear, setSalYear] = useState(year);
+  const [salMonth, setSalMonth] = useState(month);
   const [salAmount, setSalAmount] = useState("");
   const [salPaidAt, setSalPaidAt] = useState("");
   const [salNote, setSalNote] = useState("");
@@ -214,53 +214,28 @@ export default function EmployeeDetail() {
     }
   }
 
-  return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-8 p-4 pb-16">
-      <header className="flex items-center justify-between gap-2">
-        <div>
-          <Link to="/admin" className="text-sm underline">
-            ← Admin
-          </Link>
-          <h1 className="text-xl font-semibold">
-            {employee ? `${employee.lastName} ${employee.firstName}` : "Employee"}
-          </h1>
-          {employee ? (
-            <p className="text-sm text-neutral-600">{employee.login}</p>
-          ) : null}
-        </div>
-        <button
-          type="button"
-          className="min-h-11 rounded border px-3 py-3 text-sm"
-          onClick={() => void logout()}
-        >
-          Log out
-        </button>
-      </header>
+  const title = employee ? `${employee.lastName} ${employee.firstName}` : "Employee";
 
-      <section className="flex gap-3">
-        <label className="flex flex-1 flex-col gap-1 text-sm">
-          Year
-          <input
-            className="min-h-11 rounded border px-3 py-3 text-base"
-            type="number"
-            min={2000}
-            max={2100}
-            value={year}
-            onChange={(e) => setYear(Number(e.target.value))}
-          />
-        </label>
-        <label className="flex flex-1 flex-col gap-1 text-sm">
-          Month
-          <input
-            className="min-h-11 rounded border px-3 py-3 text-base"
-            type="number"
-            min={1}
-            max={12}
-            value={month}
-            onChange={(e) => setMonth(Number(e.target.value))}
-          />
-        </label>
-      </section>
+  return (
+    <AppShell title={title} nav={adminNav}>
+      <div>
+        <Link to="/admin/employees" className="inline-flex min-h-11 items-center text-sm underline">
+          ← Employees
+        </Link>
+        {employee ? (
+          <p className="text-sm text-neutral-600">{employee.login}</p>
+        ) : null}
+      </div>
+
+      <TabBar
+        tabs={[
+          { id: "profile", label: "Profile" },
+          { id: "month", label: "Month" },
+          { id: "payouts", label: "Payouts" },
+        ]}
+        value={tab}
+        onChange={(id) => setTab(id as Tab)}
+      />
 
       {error ? (
         <p className="text-sm text-red-700" role="alert">
@@ -269,13 +244,16 @@ export default function EmployeeDetail() {
       ) : null}
       {loading ? <p className="text-sm text-neutral-500">Loading…</p> : null}
 
-      {employee ? (
-        <form onSubmit={onSave} className="flex flex-col gap-3 rounded border p-3">
+      {tab === "profile" && employee ? (
+        <form
+          onSubmit={onSave}
+          className="flex flex-col gap-3 rounded border border-neutral-200 bg-white p-3"
+        >
           <h2 className="text-lg font-medium">Edit</h2>
           <label className="flex flex-col gap-1 text-sm">
             First name
             <input
-              className="min-h-11 rounded border px-3 py-3 text-base"
+              className={inputClass}
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
               required
@@ -285,7 +263,7 @@ export default function EmployeeDetail() {
           <label className="flex flex-col gap-1 text-sm">
             Last name
             <input
-              className="min-h-11 rounded border px-3 py-3 text-base"
+              className={inputClass}
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
               required
@@ -295,7 +273,7 @@ export default function EmployeeDetail() {
           <label className="flex flex-col gap-1 text-sm">
             Hours/month
             <input
-              className="min-h-11 rounded border px-3 py-3 text-base"
+              className={inputClass}
               value={hoursPerMonth}
               onChange={(e) => setHoursPerMonth(e.target.value)}
               required
@@ -305,9 +283,10 @@ export default function EmployeeDetail() {
               Changing this rewrites past stats balances.
             </span>
           </label>
-          <label className="flex items-center gap-2 text-sm">
+          <label className="flex min-h-11 items-center gap-2 text-sm">
             <input
               type="checkbox"
+              className="size-5"
               checked={isActive}
               onChange={(e) => setIsActive(e.target.checked)}
               disabled={pending}
@@ -315,249 +294,246 @@ export default function EmployeeDetail() {
             Active
           </label>
           <p className="text-xs text-neutral-500">
-            Hired: {isoToUtcDateTimeParts(employee.hiredAt).date} (UTC) ·{" "}
-            {employee.payType}
+            Hired: {isoToUtcDateTimeParts(employee.hiredAt).date} (UTC) · {employee.payType}
           </p>
-          <button
-            type="submit"
-            disabled={pending}
-            className="min-h-11 rounded bg-neutral-900 px-3 py-3 text-base text-white disabled:opacity-50"
-          >
+          <button type="submit" disabled={pending} className={btnPrimary}>
             {pending ? "Saving…" : "Save"}
           </button>
         </form>
       ) : null}
 
-      <section className="flex flex-col gap-2">
-        <h2 className="text-lg font-medium">Stats</h2>
-        {stats ? (
-          <ul className="grid grid-cols-2 gap-2 text-sm">
-            <li>Worked: {stats.workedHours} h</li>
-            <li>Norm: {stats.normHours} h</li>
-            <li>Balance: {stats.balance} h</li>
-            <li>Pay: {stats.monthlyPay}</li>
-            <li className="col-span-2">Paid overtime: {stats.paidOvertimeHours} h</li>
-            <li className="col-span-2">Total balance: {stats.totalBalance} h</li>
-          </ul>
-        ) : (
-          <p className="text-sm text-neutral-500">No stats</p>
-        )}
-      </section>
+      {tab === "month" ? (
+        <>
+          <MonthPicker year={year} month={month} onChange={setYearMonth} />
+          <section className="flex flex-col gap-2">
+            <h2 className="text-lg font-medium">Stats</h2>
+            <StatsBlock stats={stats} />
+          </section>
+          <section className="flex flex-col gap-2">
+            <h2 className="text-lg font-medium">Shifts</h2>
+            <ShiftList shifts={shifts} loading={loading} onDelete={onDeleteShift} />
+          </section>
+          <section className="flex flex-col gap-2">
+            <h2 className="text-lg font-medium">Sick days</h2>
+            <ul className="flex flex-col gap-2 md:hidden">
+              {sickDays.map((d) => (
+                <li
+                  key={d.id}
+                  className="flex items-center justify-between rounded border border-neutral-200 bg-white p-3 text-sm"
+                >
+                  <span>
+                    {isoToUtcDateTimeParts(d.date).date}
+                    {d.note ? ` — ${d.note}` : ""}
+                  </span>
+                  <button
+                    type="button"
+                    className={btnSecondary}
+                    onClick={() => void onDeleteSick(d.id)}
+                  >
+                    Del
+                  </button>
+                </li>
+              ))}
+              {sickDays.length === 0 && !loading ? (
+                <li className="text-sm text-neutral-500">No sick days</li>
+              ) : null}
+            </ul>
+            <div className="hidden overflow-x-auto md:block">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-neutral-200">
+                    <th className="px-3 py-3 font-medium">Date</th>
+                    <th className="px-3 py-3 font-medium">Note</th>
+                    <th className="px-3 py-3 font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sickDays.map((d) => (
+                    <tr key={d.id} className="border-b border-neutral-100">
+                      <td className="px-3 py-3">{isoToUtcDateTimeParts(d.date).date}</td>
+                      <td className="px-3 py-3">{d.note ?? ""}</td>
+                      <td className="px-3 py-3">
+                        <button
+                          type="button"
+                          className={btnSecondary}
+                          onClick={() => void onDeleteSick(d.id)}
+                        >
+                          Del
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {sickDays.length === 0 && !loading ? (
+                    <tr>
+                      <td className="px-3 py-3 text-neutral-500" colSpan={3}>
+                        No sick days
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </>
+      ) : null}
 
-      <section className="flex flex-col gap-2">
-        <h2 className="text-lg font-medium">Shifts</h2>
-        <ul className="flex flex-col gap-2">
-          {shifts.map((s) => (
-            <li
-              key={s.id}
-              className="flex items-start justify-between gap-2 rounded border p-3 text-sm"
+      {tab === "payouts" ? (
+        <>
+          <section className="flex flex-col gap-3">
+            <h2 className="text-lg font-medium">Overtime payouts (all)</h2>
+            <p className="text-xs text-neutral-500">
+              Pays out overtime hours: they are subtracted from total balance. This closes a
+              positive overtime bank. It does not fix undertime (a negative balance).
+            </p>
+            <p className="text-xs text-neutral-500">
+              List is full history. Stats paid overtime is cumulative through the selected month.
+            </p>
+            <ul className="flex flex-col gap-2">
+              {overtimePayouts.map((p) => (
+                <li
+                  key={p.id}
+                  className="flex items-start justify-between gap-2 rounded border border-neutral-200 bg-white p-3 text-sm"
+                >
+                  <div>
+                    {isoToUtcDateTimeParts(p.date).date} · {p.hoursPaid} h · {p.amount}
+                    {p.note ? ` — ${p.note}` : ""}
+                  </div>
+                  <button
+                    type="button"
+                    className={btnSecondary}
+                    onClick={() => void onDeleteOvertime(p.id)}
+                  >
+                    Del
+                  </button>
+                </li>
+              ))}
+              {overtimePayouts.length === 0 && !loading ? (
+                <li className="text-sm text-neutral-500">No overtime payouts</li>
+              ) : null}
+            </ul>
+            <form
+              onSubmit={onCreateOvertime}
+              className="flex flex-col gap-3 rounded border border-neutral-200 bg-white p-3"
             >
-              <div>
-                {isoToUtcDateTimeParts(s.date).date}{" "}
-                {isoToUtcDateTimeParts(s.startTime).time}–
-                {isoToUtcDateTimeParts(s.endTime).time} ·{" "}
-                {(s.workedMinutes / 60).toFixed(1)} h
-              </div>
-              <button type="button" className="underline" onClick={() => void onDeleteShift(s.id)}>
-                Del
+              <h3 className="text-sm font-medium">Add overtime payout</h3>
+              <label className="flex flex-col gap-1 text-sm">
+                Date (UTC)
+                <input
+                  type="date"
+                  className={inputClass}
+                  value={otDate}
+                  onChange={(e) => setOtDate(e.target.value)}
+                  required
+                  disabled={otPending}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                Hours paid
+                <input
+                  className={inputClass}
+                  value={otHours}
+                  onChange={(e) => setOtHours(e.target.value)}
+                  required
+                  disabled={otPending}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                Amount
+                <input
+                  className={inputClass}
+                  value={otAmount}
+                  onChange={(e) => setOtAmount(e.target.value)}
+                  required
+                  disabled={otPending}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                Note
+                <input
+                  className={inputClass}
+                  value={otNote}
+                  onChange={(e) => setOtNote(e.target.value)}
+                  disabled={otPending}
+                />
+              </label>
+              <button type="submit" disabled={otPending} className={btnPrimary}>
+                {otPending ? "Saving…" : "Add"}
               </button>
-            </li>
-          ))}
-          {shifts.length === 0 && !loading ? (
-            <li className="text-sm text-neutral-500">No shifts</li>
-          ) : null}
-        </ul>
-      </section>
+            </form>
+          </section>
 
-      <section className="flex flex-col gap-2">
-        <h2 className="text-lg font-medium">Sick days</h2>
-        <ul className="flex flex-col gap-2">
-          {sickDays.map((d) => (
-            <li
-              key={d.id}
-              className="flex items-center justify-between rounded border p-3 text-sm"
+          <section className="flex flex-col gap-3">
+            <h2 className="text-lg font-medium">Salary payouts</h2>
+            <p className="text-xs text-neutral-500">Does not change hour balance.</p>
+            <ul className="flex flex-col gap-2">
+              {salaryPayouts.map((p) => (
+                <li
+                  key={p.id}
+                  className="flex items-start justify-between gap-2 rounded border border-neutral-200 bg-white p-3 text-sm"
+                >
+                  <div>
+                    {p.year}-{p.month} · {p.amount} · {isoToUtcDateTimeParts(p.paidAt).date}
+                    {p.note ? ` — ${p.note}` : ""}
+                  </div>
+                  <button
+                    type="button"
+                    className={btnSecondary}
+                    onClick={() => void onDeleteSalary(p.id)}
+                  >
+                    Del
+                  </button>
+                </li>
+              ))}
+              {salaryPayouts.length === 0 && !loading ? (
+                <li className="text-sm text-neutral-500">No salary payouts</li>
+              ) : null}
+            </ul>
+            <form
+              onSubmit={onCreateSalary}
+              className="flex flex-col gap-3 rounded border border-neutral-200 bg-white p-3"
             >
-              <span>
-                {isoToUtcDateTimeParts(d.date).date}
-                {d.note ? ` — ${d.note}` : ""}
-              </span>
-              <button type="button" className="underline" onClick={() => void onDeleteSick(d.id)}>
-                Del
+              <h3 className="text-sm font-medium">Add salary payout</h3>
+              <MonthPicker year={salYear} month={salMonth} onChange={(y, m) => {
+                setSalYear(y);
+                setSalMonth(m);
+              }} />
+              <label className="flex flex-col gap-1 text-sm">
+                Amount
+                <input
+                  className={inputClass}
+                  value={salAmount}
+                  onChange={(e) => setSalAmount(e.target.value)}
+                  required
+                  disabled={salPending}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                Paid at (UTC date)
+                <input
+                  type="date"
+                  className={inputClass}
+                  value={salPaidAt}
+                  onChange={(e) => setSalPaidAt(e.target.value)}
+                  required
+                  disabled={salPending}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                Note
+                <input
+                  className={inputClass}
+                  value={salNote}
+                  onChange={(e) => setSalNote(e.target.value)}
+                  disabled={salPending}
+                />
+              </label>
+              <button type="submit" disabled={salPending} className={btnPrimary}>
+                {salPending ? "Saving…" : "Add"}
               </button>
-            </li>
-          ))}
-          {sickDays.length === 0 && !loading ? (
-            <li className="text-sm text-neutral-500">No sick days</li>
-          ) : null}
-        </ul>
-      </section>
-
-      <section className="flex flex-col gap-3">
-        <h2 className="text-lg font-medium">Overtime payouts (all)</h2>
-        <p className="text-xs text-neutral-500">
-          List is full history. Stats paid overtime is cumulative through the selected month.
-        </p>
-        <ul className="flex flex-col gap-2">
-          {overtimePayouts.map((p) => (
-            <li
-              key={p.id}
-              className="flex items-start justify-between gap-2 rounded border p-3 text-sm"
-            >
-              <div>
-                {isoToUtcDateTimeParts(p.date).date} · {p.hoursPaid} h · {p.amount}
-                {p.note ? ` — ${p.note}` : ""}
-              </div>
-              <button type="button" className="underline" onClick={() => void onDeleteOvertime(p.id)}>
-                Del
-              </button>
-            </li>
-          ))}
-          {overtimePayouts.length === 0 && !loading ? (
-            <li className="text-sm text-neutral-500">No overtime payouts</li>
-          ) : null}
-        </ul>
-        <form onSubmit={onCreateOvertime} className="flex flex-col gap-3 rounded border p-3">
-          <h3 className="text-sm font-medium">Add overtime payout</h3>
-          <label className="flex flex-col gap-1 text-sm">
-            Date (UTC)
-            <input
-              type="date"
-              className="min-h-11 rounded border px-3 py-3 text-base"
-              value={otDate}
-              onChange={(e) => setOtDate(e.target.value)}
-              required
-              disabled={otPending}
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            Hours paid
-            <input
-              className="min-h-11 rounded border px-3 py-3 text-base"
-              value={otHours}
-              onChange={(e) => setOtHours(e.target.value)}
-              required
-              disabled={otPending}
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            Amount
-            <input
-              className="min-h-11 rounded border px-3 py-3 text-base"
-              value={otAmount}
-              onChange={(e) => setOtAmount(e.target.value)}
-              required
-              disabled={otPending}
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            Note
-            <input
-              className="min-h-11 rounded border px-3 py-3 text-base"
-              value={otNote}
-              onChange={(e) => setOtNote(e.target.value)}
-              disabled={otPending}
-            />
-          </label>
-          <button
-            type="submit"
-            disabled={otPending}
-            className="min-h-11 rounded bg-neutral-900 px-3 py-3 text-base text-white disabled:opacity-50"
-          >
-            {otPending ? "Saving…" : "Add"}
-          </button>
-        </form>
-      </section>
-
-      <section className="flex flex-col gap-3">
-        <h2 className="text-lg font-medium">Salary payouts</h2>
-        <ul className="flex flex-col gap-2">
-          {salaryPayouts.map((p) => (
-            <li
-              key={p.id}
-              className="flex items-start justify-between gap-2 rounded border p-3 text-sm"
-            >
-              <div>
-                {p.year}-{p.month} · {p.amount} · {isoToUtcDateTimeParts(p.paidAt).date}
-                {p.note ? ` — ${p.note}` : ""}
-              </div>
-              <button type="button" className="underline" onClick={() => void onDeleteSalary(p.id)}>
-                Del
-              </button>
-            </li>
-          ))}
-          {salaryPayouts.length === 0 && !loading ? (
-            <li className="text-sm text-neutral-500">No salary payouts</li>
-          ) : null}
-        </ul>
-        <form onSubmit={onCreateSalary} className="flex flex-col gap-3 rounded border p-3">
-          <h3 className="text-sm font-medium">Add salary payout</h3>
-          <div className="flex gap-2">
-            <label className="flex flex-1 flex-col gap-1 text-sm">
-              Year
-              <input
-                className="min-h-11 rounded border px-3 py-3 text-base"
-                type="number"
-                min={2000}
-                max={2100}
-                value={salYear}
-                onChange={(e) => setSalYear(Number(e.target.value))}
-                required
-                disabled={salPending}
-              />
-            </label>
-            <label className="flex flex-1 flex-col gap-1 text-sm">
-              Month
-              <input
-                className="min-h-11 rounded border px-3 py-3 text-base"
-                type="number"
-                min={1}
-                max={12}
-                value={salMonth}
-                onChange={(e) => setSalMonth(Number(e.target.value))}
-                required
-                disabled={salPending}
-              />
-            </label>
-          </div>
-          <label className="flex flex-col gap-1 text-sm">
-            Amount
-            <input
-              className="min-h-11 rounded border px-3 py-3 text-base"
-              value={salAmount}
-              onChange={(e) => setSalAmount(e.target.value)}
-              required
-              disabled={salPending}
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            Paid at (UTC date)
-            <input
-              type="date"
-              className="min-h-11 rounded border px-3 py-3 text-base"
-              value={salPaidAt}
-              onChange={(e) => setSalPaidAt(e.target.value)}
-              required
-              disabled={salPending}
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            Note
-            <input
-              className="min-h-11 rounded border px-3 py-3 text-base"
-              value={salNote}
-              onChange={(e) => setSalNote(e.target.value)}
-              disabled={salPending}
-            />
-          </label>
-          <button
-            type="submit"
-            disabled={salPending}
-            className="min-h-11 rounded bg-neutral-900 px-3 py-3 text-base text-white disabled:opacity-50"
-          >
-            {salPending ? "Saving…" : "Add"}
-          </button>
-        </form>
-      </section>
-    </div>
+            </form>
+          </section>
+        </>
+      ) : null}
+    </AppShell>
   );
 }
