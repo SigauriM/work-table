@@ -16,7 +16,6 @@ export default function LoginPage() {
     setPending(true);
     try {
       await login(loginName.trim(), password);
-      // редирект: App увидит user и уведёт с /login
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message);
@@ -30,11 +29,11 @@ export default function LoginPage() {
 
   return (
     <div className="mx-auto flex min-h-dvh max-w-md flex-col justify-center gap-6 p-4">
-      <h1 className="text-2xl font-semibold">Work Table</h1>
-      <p className="text-sm text-neutral-600">Sign in</p>
+      <h1 className="text-2xl font-bold tracking-tight">Work Table</h1>
+      <p className="text-sm text-[var(--ts-mute)]">Sign in</p>
 
       <form onSubmit={onSubmit} className="flex flex-col gap-4">
-        <label className="flex flex-col gap-1 text-sm">
+        <label className="flex flex-col gap-1 text-sm text-[var(--ts-mute)]">
           Login
           <input
             className={inputClass}
@@ -47,7 +46,7 @@ export default function LoginPage() {
           />
         </label>
 
-        <label className="flex flex-col gap-1 text-sm">
+        <label className="flex flex-col gap-1 text-sm text-[var(--ts-mute)]">
           Password
           <input
             className={inputClass}
@@ -62,16 +61,12 @@ export default function LoginPage() {
         </label>
 
         {error ? (
-          <p className="text-sm text-red-700" role="alert">
+          <p className="text-sm text-[var(--ts-under)]" role="alert">
             {error}
           </p>
         ) : null}
 
-        <button
-          type="submit"
-          disabled={pending}
-          className={btnPrimary}
-        >
+        <button type="submit" disabled={pending} className={btnPrimary}>
           {pending ? "Signing in…" : "Sign in"}
         </button>
       </form>

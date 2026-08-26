@@ -73,13 +73,19 @@ function assertCanAccess(actor: Actor, rowEmployeeId: string) {
 }
 
 export async function listShifts(query: ListQuery) {
-  const range = monthRangeUtc(query.year, query.month);
+  if (query.year !== undefined && query.month !== undefined) {
+    const range = monthRangeUtc(query.year, query.month);
+    return prisma.shift.findMany({
+      where: {
+        employeeId: query.employeeId,
+        date: { gte: range.gte, lt: range.lt },
+      },
+      orderBy: [{ date: "asc" }, { startTime: "asc" }],
+    });
+  }
   return prisma.shift.findMany({
-    where: {
-      employeeId: query.employeeId,
-      date: { gte: range.gte, lt: range.lt },
-    },
-    orderBy: [{ date: "asc" }, { startTime: "asc" }],
+    where: { employeeId: query.employeeId },
+    orderBy: [{ date: "desc" }, { startTime: "desc" }],
   });
 }
 

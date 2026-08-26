@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { BUILD_LABEL } from "../buildLabel";
-import { btnSecondary } from "../ui";
 
 export type NavItem = { to: string; label: string; end?: boolean };
 
@@ -19,7 +18,7 @@ export const adminNav: NavItem[] = [
 function linkClass(active: boolean) {
   return [
     "flex min-h-11 items-center justify-center rounded px-3 text-sm md:justify-start",
-    active ? "bg-neutral-900 text-white" : "text-neutral-800",
+    active ? "font-semibold text-[var(--ts-ink)]" : "text-[var(--ts-mute)]",
   ].join(" ");
 }
 
@@ -27,20 +26,24 @@ export function AppShell({
   title,
   nav,
   children,
+  hideHeader = false,
+  flush = false,
 }: {
   title: string;
   nav: NavItem[];
   children: ReactNode;
+  hideHeader?: boolean;
+  flush?: boolean;
 }) {
   const { user, logout } = useAuth();
 
   return (
-    <div className="min-h-dvh bg-neutral-50 text-neutral-900">
-      <aside className="hidden md:fixed md:inset-y-0 md:flex md:w-56 md:flex-col md:border-r md:border-neutral-200 md:bg-white">
+    <div className="min-h-dvh bg-[var(--ts-bg)] text-[var(--ts-ink)]">
+      <aside className="hidden md:fixed md:inset-y-0 md:flex md:w-56 md:flex-col md:border-r md:border-[var(--ts-line)] md:bg-[var(--ts-bg)]">
         <div className="px-4 py-4">
-          <div className="text-lg font-semibold">Work Table</div>
-          <div className="text-sm text-neutral-600">{user?.login}</div>
-          <div className="mt-1 text-xs text-neutral-400">{BUILD_LABEL}</div>
+          <div className="text-lg font-bold tracking-tight">Work Table</div>
+          <div className="text-sm text-[var(--ts-mute)]">{user?.login}</div>
+          <div className="mt-1 text-xs text-[var(--ts-faint)]">{BUILD_LABEL}</div>
         </div>
         <nav className="flex flex-1 flex-col gap-1 px-2" aria-label="Main">
           {nav.map((item) => (
@@ -57,7 +60,7 @@ export function AppShell({
         <div className="p-2">
           <button
             type="button"
-            className={`${btnSecondary} w-full`}
+            className="flex min-h-11 w-full items-center justify-center rounded-full text-sm font-semibold text-[var(--ts-mute)]"
             onClick={() => void logout()}
           >
             Log out
@@ -66,36 +69,50 @@ export function AppShell({
       </aside>
 
       <div className="md:pl-56">
-        <header className="flex items-center justify-between gap-2 border-b border-neutral-200 bg-white px-4 py-3 md:hidden">
-          <div>
-            <h1 className="text-lg font-semibold">{title}</h1>
-            <p className="text-sm text-neutral-600">{user?.login}</p>
-          </div>
-        </header>
+        {!hideHeader ? (
+          <header className="flex items-center justify-between gap-2 border-b border-[var(--ts-line)] bg-[var(--ts-bg)] px-4 py-3 md:hidden">
+            <div>
+              <h1 className="text-lg font-bold tracking-tight">{title}</h1>
+              <p className="text-sm text-[var(--ts-mute)]">{user?.login}</p>
+            </div>
+          </header>
+        ) : null}
 
-        <main className="mx-auto flex w-full max-w-5xl flex-col gap-6 p-4 pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] md:gap-8 md:pb-8">
-          <h1 className="hidden text-xl font-semibold md:block">{title}</h1>
+        <main
+          className={
+            flush
+              ? "pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] md:pb-0"
+              : "mx-auto flex w-full max-w-5xl flex-col gap-6 p-4 pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] md:gap-8 md:pb-8"
+          }
+        >
+          {!hideHeader ? (
+            <h1 className="hidden text-xl font-bold tracking-tight md:block">{title}</h1>
+          ) : null}
           {children}
         </main>
 
         <nav
-          className="fixed inset-x-0 bottom-0 z-10 border-t border-neutral-200 bg-white pb-[env(safe-area-inset-bottom,0px)] md:hidden"
+          className="fixed inset-x-0 bottom-0 z-10 border-t border-[var(--ts-line)] bg-[var(--ts-bg)] pb-[env(safe-area-inset-bottom,0px)] md:hidden"
           aria-label="Main"
         >
-          <div className="grid grid-cols-3">
+          <div className="grid grid-cols-3 px-2 py-3 text-xs">
             {nav.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
                 end={item.end}
-                className={({ isActive }) => `${linkClass(isActive)} rounded-none`}
+                className={({ isActive }) =>
+                  `flex min-h-11 items-center justify-center ${
+                    isActive ? "font-semibold text-[var(--ts-ink)]" : "text-[var(--ts-mute)]"
+                  }`
+                }
               >
                 {item.label}
               </NavLink>
             ))}
             <button
               type="button"
-              className={`${btnSecondary} rounded-none border-0`}
+              className="flex min-h-11 items-center justify-center text-[var(--ts-mute)]"
               onClick={() => void logout()}
             >
               Log out

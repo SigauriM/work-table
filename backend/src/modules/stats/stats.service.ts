@@ -3,8 +3,10 @@ import { prisma } from "../../config/prisma.js";
 import {
   calculateMonthBalance,
   calculateMonthlyPay,
+  calculatePaidMoney,
   calculateTotalBalance,
 } from "../../core/calculations.js";
+import { utcMidnight } from "../../core/dateUtils.js";
 import { HttpError } from "../../middleware/errorHandler.js";
 
 function monthRangeUtc(year: number, month: number): { gte: Date; lt: Date } {
@@ -28,6 +30,22 @@ function ymKey(year: number, month: number): string {
 
 function decStr(value: Decimal): string {
   return value.toString();
+}
+
+function monthCountWindow(
+  year: number,
+  month: number,
+  hiredAt: Date,
+  today: Date,
+): { from: Date; to: Date } | null {
+  const monthStart = new Date(Date.UTC(year, month - 1, 1));
+  const monthLast = new Date(Date.UTC(year, month, 0));
+  const hired = utcMidnight(hiredAt);
+  const todayD = utcMidnight(today);
+  const from = hired.getTime() > monthStart.getTime() ? hired : monthStart;
+  const to = todayD.getTime() < monthLast.getTime() ? todayD : monthLast;
+  if (from.getTime() > to.getTime()) return null;
+  return { from, to };
 }
 
 function toPayEmployee(employee: {
@@ -83,35 +101,43 @@ export async function getEmployeeStats(employeeId: string, year: number, month: 
         employeeId,
         date: { lt: rangeEnd },
       },
-      select: { hoursPaid: true },
+      select: { hoursPaid: true, amount: true },
     }),
   ]);
 
-  const shiftsByMonth = new Map<string, { workedMinutes: number }[]>();
+  const shiftsByMonth = new Map<string, { date: Date; workedMinutes: number }[]>();
   for (const s of shifts) {
     const { year: y, month: m } = utcYearMonth(s.date);
     const key = ymKey(y, m);
     const list = shiftsByMonth.get(key) ?? [];
-    list.push({ workedMinutes: s.workedMinutes });
+    list.push({ date: s.date, workedMinutes: s.workedMinutes });
     shiftsByMonth.set(key, list);
   }
 
-  const sickByMonth = new Map<string, { creditedHours: Decimal }[]>();
+  const sickByMonth = new Map<string, { date: Date; creditedHours: Decimal }[]>();
   for (const d of sickDays) {
     const { year: y, month: m } = utcYearMonth(d.date);
     const key = ymKey(y, m);
     const list = sickByMonth.get(key) ?? [];
-    list.push({ creditedHours: new Decimal(d.creditedHours.toString()) });
+    list.push({ date: d.date, creditedHours: new Decimal(d.creditedHours.toString()) });
     sickByMonth.set(key, list);
   }
 
-  const hoursPerMonth = new Decimal(employee.hoursPerMonth.toString());
+  const hoursPerDay = new Decimal(employee.hoursPerDay.toString());
+  const today = new Date();
   const monthlyBalances: Decimal[] = [];
+  const closedMonthWorkedHours: Decimal[] = [];
   let selected: {
     workedHours: Decimal;
     normHours: Decimal;
     balance: Decimal;
   } | null = null;
+
+  const emptyMonth = {
+    workedHours: new Decimal(0),
+    normHours: new Decimal(0),
+    balance: new Decimal(0),
+  };
 
   for (
     let y = hired.year, m = hired.month;
@@ -119,12 +145,21 @@ export async function getEmployeeStats(employeeId: string, year: number, month: 
 
   ) {
     const key = ymKey(y, m);
-    const monthResult = calculateMonthBalance({
-      shifts: shiftsByMonth.get(key) ?? [],
-      sickDays: sickByMonth.get(key) ?? [],
-      hoursPerMonth,
-    });
+    const window = monthCountWindow(y, m, employee.hiredAt, today);
+    const monthResult = window
+      ? calculateMonthBalance({
+          shifts: shiftsByMonth.get(key) ?? [],
+          sickDays: sickByMonth.get(key) ?? [],
+          hoursPerDay,
+          from: window.from,
+          to: window.to,
+        })
+      : emptyMonth;
     monthlyBalances.push(monthResult.balance);
+    const monthLast = utcMidnight(new Date(Date.UTC(y, m, 0)));
+    if (monthLast.getTime() <= utcMidnight(today).getTime()) {
+      closedMonthWorkedHours.push(monthResult.workedHours);
+    }
     if (y === year && m === month) {
       selected = monthResult;
     }
@@ -140,8 +175,10 @@ export async function getEmployeeStats(employeeId: string, year: number, month: 
   }
 
   let paidOvertimeHours = new Decimal(0);
+  let overtimePayoutAmount = new Decimal(0);
   for (const p of overtimePayouts) {
     paidOvertimeHours = paidOvertimeHours.plus(p.hoursPaid.toString());
+    overtimePayoutAmount = overtimePayoutAmount.plus(p.amount.toString());
   }
 
   const totalBalance = calculateTotalBalance({
@@ -149,11 +186,18 @@ export async function getEmployeeStats(employeeId: string, year: number, month: 
     paidOvertimeHours,
   });
 
+  const payEmployee = toPayEmployee(employee);
   let monthlyPay: Decimal;
+  let paid: { total: Decimal; base: Decimal; overtime: Decimal };
   try {
-    monthlyPay = calculateMonthlyPay(toPayEmployee(employee), selected.workedHours);
+    monthlyPay = calculateMonthlyPay(payEmployee, selected.workedHours);
+    paid = calculatePaidMoney({
+      employee: payEmployee,
+      closedMonthWorkedHours,
+      overtimePayoutAmount,
+    });
   } catch (err) {
-    console.error("calculateMonthlyPay failed", { employeeId, err });
+    console.error("pay calculation failed", { employeeId, err });
     throw new HttpError(500, "Internal server error");
   }
 
@@ -167,6 +211,10 @@ export async function getEmployeeStats(employeeId: string, year: number, month: 
     monthlyPay: decStr(monthlyPay),
     totalBalance: decStr(totalBalance),
     paidOvertimeHours: decStr(paidOvertimeHours),
+    paidTotal: decStr(paid.total),
+    paidBase: decStr(paid.base),
+    paidOvertimeAmount: decStr(paid.overtime),
+    hoursPerDay: decStr(hoursPerDay),
   };
 }
 

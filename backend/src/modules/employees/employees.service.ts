@@ -24,7 +24,6 @@ function toPublic(employee: {
   monthlySalary: unknown;
   hoursPerDay: unknown;
   daysPerWeek: number;
-  hoursPerMonth: unknown;
   hiredAt: Date;
   isActive: boolean;
   user: { id: string; login: string; role: Role };
@@ -40,7 +39,6 @@ function toPublic(employee: {
     monthlySalary: employee.monthlySalary,
     hoursPerDay: employee.hoursPerDay,
     daysPerWeek: employee.daysPerWeek,
-    hoursPerMonth: employee.hoursPerMonth,
     hiredAt: employee.hiredAt,
     isActive: employee.isActive,
   };
@@ -91,7 +89,6 @@ export async function createEmployee(input: CreateInput) {
           monthlySalary: payType === PayType.SALARY ? input.monthlySalary : null,
           hoursPerDay: input.hoursPerDay,
           daysPerWeek: input.daysPerWeek,
-          hoursPerMonth: input.hoursPerMonth,
           hiredAt: input.hiredAt,
         },
         include: publicInclude,
@@ -107,51 +104,70 @@ export async function createEmployee(input: CreateInput) {
 }
 
 export async function updateEmployee(id: string, input: UpdateInput) {
-  return prisma.$transaction(async (tx) => {
-    const existing = await tx.employee.findUnique({ where: { id } });
-    if (!existing) {
-      throw new HttpError(404, "Not found");
-    }
-
-    const data: Prisma.EmployeeUpdateInput = {};
-    if (input.firstName !== undefined) data.firstName = input.firstName;
-    if (input.lastName !== undefined) data.lastName = input.lastName;
-    if (input.hoursPerDay !== undefined) data.hoursPerDay = input.hoursPerDay;
-    if (input.daysPerWeek !== undefined) data.daysPerWeek = input.daysPerWeek;
-    if (input.hoursPerMonth !== undefined) data.hoursPerMonth = input.hoursPerMonth;
-    if (input.hiredAt !== undefined) data.hiredAt = input.hiredAt;
-    if (input.isActive !== undefined) data.isActive = input.isActive;
-
-    if (input.payType !== undefined) {
-      const payType = input.payType as PayType;
-      data.payType = payType;
-      if (payType === PayType.HOURLY) {
-        data.hourlyRate = input.hourlyRate;
-        data.monthlySalary = null;
-      } else {
-        data.monthlySalary = input.monthlySalary;
-        data.hourlyRate = null;
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const existing = await tx.employee.findUnique({ where: { id } });
+      if (!existing) {
+        throw new HttpError(404, "Not found");
       }
-    } else {
-      if (input.hourlyRate !== undefined) data.hourlyRate = input.hourlyRate;
-      if (input.monthlySalary !== undefined) data.monthlySalary = input.monthlySalary;
-    }
 
-    const employee = await tx.employee.update({
-      where: { id: existing.id },
-      data,
-      include: publicInclude,
-    });
+      if (input.login !== undefined || input.password !== undefined) {
+        const userData: Prisma.UserUpdateInput = {};
+        if (input.login !== undefined) userData.login = input.login;
+        if (input.password !== undefined) {
+          userData.passwordHash = await bcrypt.hash(input.password, BCRYPT_ROUNDS);
+        }
+        await tx.user.update({
+          where: { id: existing.userId },
+          data: userData,
+        });
+      }
 
-    if (input.isActive === false) {
-      await tx.refreshToken.updateMany({
-        where: { userId: existing.userId },
-        data: { revokedAt: new Date() },
+      const data: Prisma.EmployeeUpdateInput = {};
+      if (input.firstName !== undefined) data.firstName = input.firstName;
+      if (input.lastName !== undefined) data.lastName = input.lastName;
+      if (input.hoursPerDay !== undefined) data.hoursPerDay = input.hoursPerDay;
+      if (input.daysPerWeek !== undefined) data.daysPerWeek = input.daysPerWeek;
+      if (input.hiredAt !== undefined) data.hiredAt = input.hiredAt;
+      if (input.isActive !== undefined) data.isActive = input.isActive;
+
+      if (input.payType !== undefined) {
+        const payType = input.payType as PayType;
+        data.payType = payType;
+        if (payType === PayType.HOURLY) {
+          data.hourlyRate = input.hourlyRate;
+          data.monthlySalary = null;
+        } else {
+          data.monthlySalary = input.monthlySalary;
+          data.hourlyRate = null;
+        }
+      } else {
+        if (input.hourlyRate !== undefined) data.hourlyRate = input.hourlyRate;
+        if (input.monthlySalary !== undefined) data.monthlySalary = input.monthlySalary;
+      }
+
+      const employee = await tx.employee.update({
+        where: { id: existing.id },
+        data,
+        include: publicInclude,
       });
-    }
 
-    return toPublic(employee);
-  });
+      if (input.isActive === false) {
+        await tx.refreshToken.updateMany({
+          where: { userId: existing.userId },
+          data: { revokedAt: new Date() },
+        });
+      }
+
+      return toPublic(employee);
+    });
+  } catch (err) {
+    if (err instanceof HttpError) throw err;
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      throw new HttpError(409, "Login already taken");
+    }
+    throw err;
+  }
 }
 
 export async function deactivateEmployee(id: string) {

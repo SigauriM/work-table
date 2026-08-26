@@ -1,11 +1,6 @@
 import { apiFetch } from "./client";
 import { toQuery } from "./query";
-import type {
-  CreateOvertimePayoutBody,
-  CreateSalaryPayoutBody,
-  OvertimePayout,
-  SalaryPayout,
-} from "../types/api";
+import type { CreateOvertimePayoutBody, OvertimePayout } from "../types/api";
 
 export function listOvertimePayouts(
   employeeId: string,
@@ -25,28 +20,6 @@ export function createOvertimePayout(employeeId: string, body: CreateOvertimePay
 
 export function deleteOvertimePayout(employeeId: string, payoutId: string) {
   return apiFetch<void>(`/api/employees/${employeeId}/overtime-payouts/${payoutId}`, {
-    method: "DELETE",
-  });
-}
-
-export function listSalaryPayouts(
-  employeeId: string,
-  params?: { year: number; month: number },
-) {
-  return apiFetch<SalaryPayout[]>(
-    `/api/employees/${employeeId}/salary-payouts${toQuery(params ?? {})}`,
-  );
-}
-
-export function createSalaryPayout(employeeId: string, body: CreateSalaryPayoutBody) {
-  return apiFetch<SalaryPayout>(`/api/employees/${employeeId}/salary-payouts`, {
-    method: "POST",
-    body,
-  });
-}
-
-export function deleteSalaryPayout(employeeId: string, payoutId: string) {
-  return apiFetch<void>(`/api/employees/${employeeId}/salary-payouts/${payoutId}`, {
     method: "DELETE",
   });
 }

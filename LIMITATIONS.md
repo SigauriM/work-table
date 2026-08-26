@@ -24,12 +24,12 @@ Stage 8 frontend treats form date/time as UTC (see below). Full Europe/Berlin on
 Unlike overnight shifts (a functional limitation with a defined rule),
 UTC vs Berlin is a **production blocker**, not just reduced feature scope.
 
-## hoursPerMonth changes rewrite history
+## hoursPerDay changes rewrite history
 
-Month balances in stats always use the employee's *current* `hoursPerMonth`.
+Day and month balances in stats always use the employee's *current* `hoursPerDay`.
 
-There is no per-month norm history. If an admin changes `hoursPerMonth`,
-past months' balances in `/stats` recalculate with the new norm.
+There is no per-day or per-month norm history. If an admin changes `hoursPerDay`,
+past months' balances in `/stats` recalculate with the new daily norm.
 
 ## hiredAt month boundary uses UTC
 

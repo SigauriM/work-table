@@ -7,6 +7,7 @@ import EmployeeStatsPage from "./pages/employee/EmployeeStats";
 import AdminHome from "./pages/admin/AdminHome";
 import AdminEmployees from "./pages/admin/AdminEmployees";
 import EmployeeDetail from "./pages/admin/EmployeeDetail";
+import EmployeeShifts from "./pages/admin/EmployeeShifts";
 
 function RequireAuth({
   role,
@@ -16,7 +17,11 @@ function RequireAuth({
   children: ReactNode;
 }) {
   const { user, ready } = useAuth();
-  if (!ready) return <div className="min-h-dvh p-4">Loading…</div>;
+  if (!ready) {
+    return (
+      <div className="min-h-dvh bg-[var(--ts-bg)] p-4 text-[var(--ts-mute)]">Loading…</div>
+    );
+  }
   if (!user) return <Navigate to="/login" replace />;
   if (role && user.role !== role) {
     return <Navigate to={user.role === "ADMIN" ? "/admin" : "/employee"} replace />;
@@ -27,7 +32,11 @@ function RequireAuth({
 export default function App() {
   const { user, ready } = useAuth();
 
-  if (!ready) return <div className="min-h-dvh p-4">Loading…</div>;
+  if (!ready) {
+    return (
+      <div className="min-h-dvh bg-[var(--ts-bg)] p-4 text-[var(--ts-mute)]">Loading…</div>
+    );
+  }
 
   return (
     <Routes>
@@ -70,6 +79,14 @@ export default function App() {
         element={
           <RequireAuth role="ADMIN">
             <AdminEmployees />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/admin/employees/:id/shifts"
+        element={
+          <RequireAuth role="ADMIN">
+            <EmployeeShifts />
           </RequireAuth>
         }
       />

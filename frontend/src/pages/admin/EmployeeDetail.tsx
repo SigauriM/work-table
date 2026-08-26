@@ -7,11 +7,8 @@ import { deleteSickDay, listSickDays } from "../../api/sickDays";
 import { employeeStats } from "../../api/stats";
 import {
   createOvertimePayout,
-  createSalaryPayout,
   deleteOvertimePayout,
-  deleteSalaryPayout,
   listOvertimePayouts,
-  listSalaryPayouts,
 } from "../../api/payouts";
 import { AppShell, adminNav } from "../../components/AppShell";
 import { MonthPicker, TabBar } from "../../components/MonthPicker";
@@ -23,7 +20,7 @@ import type {
   Employee,
   EmployeeStats,
   OvertimePayout,
-  SalaryPayout,
+  PayType,
   Shift,
   SickDay,
 } from "../../types/api";
@@ -41,11 +38,17 @@ export default function EmployeeDetail() {
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [sickDays, setSickDays] = useState<SickDay[]>([]);
   const [overtimePayouts, setOvertimePayouts] = useState<OvertimePayout[]>([]);
-  const [salaryPayouts, setSalaryPayouts] = useState<SalaryPayout[]>([]);
 
+  const [login, setLogin] = useState("");
+  const [password, setPassword] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [hoursPerMonth, setHoursPerMonth] = useState("");
+  const [payType, setPayType] = useState<PayType>("HOURLY");
+  const [hourlyRate, setHourlyRate] = useState("");
+  const [monthlySalary, setMonthlySalary] = useState("");
+  const [hoursPerDay, setHoursPerDay] = useState("");
+  const [daysPerWeek, setDaysPerWeek] = useState("5");
+  const [hiredAt, setHiredAt] = useState("");
   const [isActive, setIsActive] = useState(true);
 
   const [otDate, setOtDate] = useState("");
@@ -53,13 +56,6 @@ export default function EmployeeDetail() {
   const [otAmount, setOtAmount] = useState("");
   const [otNote, setOtNote] = useState("");
   const [otPending, setOtPending] = useState(false);
-
-  const [salYear, setSalYear] = useState(year);
-  const [salMonth, setSalMonth] = useState(month);
-  const [salAmount, setSalAmount] = useState("");
-  const [salPaidAt, setSalPaidAt] = useState("");
-  const [salNote, setSalNote] = useState("");
-  const [salPending, setSalPending] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [pending, setPending] = useState(false);
@@ -72,30 +68,34 @@ export default function EmployeeDetail() {
     try {
       const emp = await getEmployee(id);
       setEmployee(emp);
+      setLogin(emp.login);
+      setPassword("");
       setFirstName(emp.firstName);
       setLastName(emp.lastName);
-      setHoursPerMonth(emp.hoursPerMonth);
+      setPayType(emp.payType);
+      setHourlyRate(emp.hourlyRate ?? "");
+      setMonthlySalary(emp.monthlySalary ?? "");
+      setHoursPerDay(emp.hoursPerDay);
+      setDaysPerWeek(String(emp.daysPerWeek));
+      setHiredAt(isoToUtcDateTimeParts(emp.hiredAt).date);
       setIsActive(emp.isActive);
 
-      const [st, sh, sk, ot, sal] = await Promise.all([
+      const [st, sh, sk, ot] = await Promise.all([
         employeeStats(id, year, month),
-        listShifts({ employeeId: id, year, month }),
+        listShifts({ employeeId: id }),
         listSickDays({ employeeId: id, year, month }),
         listOvertimePayouts(id),
-        listSalaryPayouts(id),
       ]);
       setStats(st);
       setShifts(sh);
       setSickDays(sk);
       setOvertimePayouts(ot);
-      setSalaryPayouts(sal);
     } catch (err) {
       setEmployee(null);
       setStats(null);
       setShifts([]);
       setSickDays([]);
       setOvertimePayouts([]);
-      setSalaryPayouts([]);
       setError(err instanceof ApiError ? err.message : "Failed to load");
     } finally {
       setLoading(false);
@@ -112,12 +112,23 @@ export default function EmployeeDetail() {
     setPending(true);
     setError(null);
     try {
-      await updateEmployee(id, {
+      const body = {
+        login: login.trim(),
         firstName: firstName.trim(),
         lastName: lastName.trim(),
-        hoursPerMonth: hoursPerMonth.trim(),
+        payType,
+        hourlyRate: payType === "HOURLY" ? hourlyRate.trim() : null,
+        monthlySalary: payType === "SALARY" ? monthlySalary.trim() : null,
+        hoursPerDay: hoursPerDay.trim(),
+        daysPerWeek: Number(daysPerWeek),
+        hiredAt: utcDateToIso(hiredAt),
         isActive,
+      };
+      await updateEmployee(id, {
+        ...body,
+        ...(password.trim() ? { password: password.trim() } : {}),
       });
+      setPassword("");
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Save failed");
@@ -180,40 +191,6 @@ export default function EmployeeDetail() {
     }
   }
 
-  async function onCreateSalary(e: FormEvent) {
-    e.preventDefault();
-    if (!id) return;
-    setSalPending(true);
-    setError(null);
-    try {
-      await createSalaryPayout(id, {
-        year: salYear,
-        month: salMonth,
-        amount: salAmount.trim(),
-        paidAt: utcDateToIso(salPaidAt),
-        note: salNote.trim() || undefined,
-      });
-      setSalAmount("");
-      setSalPaidAt("");
-      setSalNote("");
-      await load();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Salary payout failed");
-    } finally {
-      setSalPending(false);
-    }
-  }
-
-  async function onDeleteSalary(payoutId: string) {
-    if (!id || !window.confirm("Delete this salary payout?")) return;
-    try {
-      await deleteSalaryPayout(id, payoutId);
-      await load();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Delete failed");
-    }
-  }
-
   const title = employee ? `${employee.lastName} ${employee.firstName}` : "Employee";
 
   return (
@@ -251,37 +228,123 @@ export default function EmployeeDetail() {
         >
           <h2 className="text-lg font-medium">Edit</h2>
           <label className="flex flex-col gap-1 text-sm">
-            First name
+            Login
             <input
               className={inputClass}
-              value={firstName}
-              onChange={(e) => setFirstName(e.target.value)}
+              value={login}
+              onChange={(e) => setLogin(e.target.value)}
               required
               disabled={pending}
+              autoComplete="username"
             />
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            Last name
+            Password
             <input
+              type="password"
               className={inputClass}
-              value={lastName}
-              onChange={(e) => setLastName(e.target.value)}
-              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               disabled={pending}
+              autoComplete="new-password"
+              placeholder="Leave blank to keep current"
             />
           </label>
+          <div className="flex gap-2">
+            <label className="flex flex-1 flex-col gap-1 text-sm">
+              First name
+              <input
+                className={inputClass}
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                required
+                disabled={pending}
+              />
+            </label>
+            <label className="flex flex-1 flex-col gap-1 text-sm">
+              Last name
+              <input
+                className={inputClass}
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                required
+                disabled={pending}
+              />
+            </label>
+          </div>
           <label className="flex flex-col gap-1 text-sm">
-            Hours/month
-            <input
+            Pay type
+            <select
               className={inputClass}
-              value={hoursPerMonth}
-              onChange={(e) => setHoursPerMonth(e.target.value)}
+              value={payType}
+              onChange={(e) => setPayType(e.target.value as PayType)}
+              disabled={pending}
+            >
+              <option value="HOURLY">HOURLY</option>
+              <option value="SALARY">SALARY</option>
+            </select>
+          </label>
+          {payType === "HOURLY" ? (
+            <label className="flex flex-col gap-1 text-sm">
+              Hourly rate
+              <input
+                className={inputClass}
+                value={hourlyRate}
+                onChange={(e) => setHourlyRate(e.target.value)}
+                required
+                disabled={pending}
+              />
+            </label>
+          ) : (
+            <label className="flex flex-col gap-1 text-sm">
+              Monthly salary
+              <input
+                className={inputClass}
+                value={monthlySalary}
+                onChange={(e) => setMonthlySalary(e.target.value)}
+                required
+                disabled={pending}
+              />
+            </label>
+          )}
+          <div className="flex gap-2">
+            <label className="flex flex-1 flex-col gap-1 text-sm">
+              Hours/day
+              <input
+                className={inputClass}
+                value={hoursPerDay}
+                onChange={(e) => setHoursPerDay(e.target.value)}
+                required
+                disabled={pending}
+              />
+              <span className="text-xs text-neutral-500">
+                Daily norm for overtime and undertime. Changing this recalculates past stats.
+              </span>
+            </label>
+            <label className="flex flex-1 flex-col gap-1 text-sm">
+              Days/week
+              <input
+                className={inputClass}
+                type="number"
+                min={1}
+                max={7}
+                value={daysPerWeek}
+                onChange={(e) => setDaysPerWeek(e.target.value)}
+                required
+                disabled={pending}
+              />
+            </label>
+          </div>
+          <label className="flex flex-col gap-1 text-sm">
+            Hired at (UTC date)
+            <input
+              type="date"
+              className={inputClass}
+              value={hiredAt}
+              onChange={(e) => setHiredAt(e.target.value)}
               required
               disabled={pending}
             />
-            <span className="text-xs text-neutral-500">
-              Changing this rewrites past stats balances.
-            </span>
           </label>
           <label className="flex min-h-11 items-center gap-2 text-sm">
             <input
@@ -293,9 +356,6 @@ export default function EmployeeDetail() {
             />
             Active
           </label>
-          <p className="text-xs text-neutral-500">
-            Hired: {isoToUtcDateTimeParts(employee.hiredAt).date} (UTC) · {employee.payType}
-          </p>
           <button type="submit" disabled={pending} className={btnPrimary}>
             {pending ? "Saving…" : "Save"}
           </button>
@@ -310,8 +370,19 @@ export default function EmployeeDetail() {
             <StatsBlock stats={stats} />
           </section>
           <section className="flex flex-col gap-2">
-            <h2 className="text-lg font-medium">Shifts</h2>
-            <ShiftList shifts={shifts} loading={loading} onDelete={onDeleteShift} />
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-lg font-medium">Shifts</h2>
+              {id ? (
+                <Link to={`/admin/employees/${id}/shifts`} className={btnSecondary}>
+                  View all
+                </Link>
+              ) : null}
+            </div>
+            <ShiftList
+              shifts={shifts.slice(0, 3)}
+              loading={loading}
+              onDelete={onDeleteShift}
+            />
           </section>
           <section className="flex flex-col gap-2">
             <h2 className="text-lg font-medium">Sick days</h2>
@@ -381,6 +452,12 @@ export default function EmployeeDetail() {
         <>
           <section className="flex flex-col gap-3">
             <h2 className="text-lg font-medium">Overtime payouts (all)</h2>
+            <div className="rounded-[18px] bg-[var(--ts-fill)] px-4 py-3">
+              <div className="text-sm text-[var(--ts-mute)]">Total balance</div>
+              <div className="text-lg font-bold tracking-tight">
+                {stats ? `${stats.totalBalance} h` : "—"}
+              </div>
+            </div>
             <p className="text-xs text-neutral-500">
               Pays out overtime hours: they are subtracted from total balance. This closes a
               positive overtime bank. It does not fix undertime (a negative balance).
@@ -458,77 +535,6 @@ export default function EmployeeDetail() {
               </label>
               <button type="submit" disabled={otPending} className={btnPrimary}>
                 {otPending ? "Saving…" : "Add"}
-              </button>
-            </form>
-          </section>
-
-          <section className="flex flex-col gap-3">
-            <h2 className="text-lg font-medium">Salary payouts</h2>
-            <p className="text-xs text-neutral-500">Does not change hour balance.</p>
-            <ul className="flex flex-col gap-2">
-              {salaryPayouts.map((p) => (
-                <li
-                  key={p.id}
-                  className="flex items-start justify-between gap-2 rounded border border-neutral-200 bg-white p-3 text-sm"
-                >
-                  <div>
-                    {p.year}-{p.month} · {p.amount} · {isoToUtcDateTimeParts(p.paidAt).date}
-                    {p.note ? ` — ${p.note}` : ""}
-                  </div>
-                  <button
-                    type="button"
-                    className={btnSecondary}
-                    onClick={() => void onDeleteSalary(p.id)}
-                  >
-                    Del
-                  </button>
-                </li>
-              ))}
-              {salaryPayouts.length === 0 && !loading ? (
-                <li className="text-sm text-neutral-500">No salary payouts</li>
-              ) : null}
-            </ul>
-            <form
-              onSubmit={onCreateSalary}
-              className="flex flex-col gap-3 rounded border border-neutral-200 bg-white p-3"
-            >
-              <h3 className="text-sm font-medium">Add salary payout</h3>
-              <MonthPicker year={salYear} month={salMonth} onChange={(y, m) => {
-                setSalYear(y);
-                setSalMonth(m);
-              }} />
-              <label className="flex flex-col gap-1 text-sm">
-                Amount
-                <input
-                  className={inputClass}
-                  value={salAmount}
-                  onChange={(e) => setSalAmount(e.target.value)}
-                  required
-                  disabled={salPending}
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-sm">
-                Paid at (UTC date)
-                <input
-                  type="date"
-                  className={inputClass}
-                  value={salPaidAt}
-                  onChange={(e) => setSalPaidAt(e.target.value)}
-                  required
-                  disabled={salPending}
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-sm">
-                Note
-                <input
-                  className={inputClass}
-                  value={salNote}
-                  onChange={(e) => setSalNote(e.target.value)}
-                  disabled={salPending}
-                />
-              </label>
-              <button type="submit" disabled={salPending} className={btnPrimary}>
-                {salPending ? "Saving…" : "Add"}
               </button>
             </form>
           </section>

@@ -1,16 +1,13 @@
-import { Prisma } from "@prisma/client";
 import { prisma } from "../../config/prisma.js";
 import { HttpError } from "../../middleware/errorHandler.js";
 import type { z } from "zod";
 import type {
   createOvertimePayoutSchema,
-  createSalaryPayoutSchema,
   listPayoutsQuerySchema,
 } from "./payouts.schema.js";
 
 type ListQuery = z.infer<typeof listPayoutsQuerySchema>;
 type CreateOvertimeInput = z.infer<typeof createOvertimePayoutSchema>;
-type CreateSalaryInput = z.infer<typeof createSalaryPayoutSchema>;
 
 function monthRangeUtc(year: number, month: number): { gte: Date; lt: Date } {
   return {
@@ -53,26 +50,6 @@ function toOvertimePublic(row: {
   };
 }
 
-function toSalaryPublic(row: {
-  id: string;
-  employeeId: string;
-  year: number;
-  month: number;
-  amount: { toString(): string };
-  paidAt: Date;
-  note: string | null;
-}) {
-  return {
-    id: row.id,
-    employeeId: row.employeeId,
-    year: row.year,
-    month: row.month,
-    amount: decStr(row.amount),
-    paidAt: row.paidAt,
-    note: row.note,
-  };
-}
-
 export async function listOvertimePayouts(employeeId: string, query: ListQuery) {
   await assertEmployee(employeeId);
   const range =
@@ -109,48 +86,4 @@ export async function deleteOvertimePayout(employeeId: string, payoutId: string)
     throw new HttpError(404, "Not found");
   }
   await prisma.overtimePayout.delete({ where: { id: row.id } });
-}
-
-export async function listSalaryPayouts(employeeId: string, query: ListQuery) {
-  await assertEmployee(employeeId);
-  const rows = await prisma.salaryPayout.findMany({
-    where: {
-      employeeId,
-      ...(query.year !== undefined && query.month !== undefined
-        ? { year: query.year, month: query.month }
-        : {}),
-    },
-    orderBy: [{ year: "asc" }, { month: "asc" }],
-  });
-  return rows.map(toSalaryPublic);
-}
-
-export async function createSalaryPayout(employeeId: string, input: CreateSalaryInput) {
-  await assertEmployee(employeeId);
-  try {
-    const row = await prisma.salaryPayout.create({
-      data: {
-        employeeId,
-        year: input.year,
-        month: input.month,
-        amount: input.amount,
-        paidAt: input.paidAt,
-        note: input.note ?? null,
-      },
-    });
-    return toSalaryPublic(row);
-  } catch (err) {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
-      throw new HttpError(409, "Salary payout already exists for this month");
-    }
-    throw err;
-  }
-}
-
-export async function deleteSalaryPayout(employeeId: string, payoutId: string) {
-  const row = await prisma.salaryPayout.findUnique({ where: { id: payoutId } });
-  if (!row || row.employeeId !== employeeId) {
-    throw new HttpError(404, "Not found");
-  }
-  await prisma.salaryPayout.delete({ where: { id: row.id } });
 }

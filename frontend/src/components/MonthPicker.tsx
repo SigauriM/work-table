@@ -76,13 +76,13 @@ export function TabBar({
   onChange: (id: string) => void;
 }) {
   return (
-    <div className="flex gap-1 overflow-x-auto border-b border-neutral-200">
+    <div className="flex gap-1 overflow-x-auto border-b border-[var(--ts-line)]">
       {tabs.map((tab) => (
         <button
           key={tab.id}
           type="button"
           className={`${btnSecondary} shrink-0 rounded-b-none border-b-0 ${
-            value === tab.id ? "bg-neutral-900 text-white" : ""
+            value === tab.id ? "bg-[var(--ts-ink)] text-[var(--ts-bg)]" : ""
           }`}
           aria-current={value === tab.id ? "page" : undefined}
           onClick={() => onChange(tab.id)}

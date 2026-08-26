@@ -4,8 +4,8 @@ import type { CreateShiftBody, Shift, UpdateShiftBody } from "../types/api";
 
 export function listShifts(params: {
   employeeId: string;
-  year: number;
-  month: number;
+  year?: number;
+  month?: number;
 }) {
   return apiFetch<Shift[]>(`/api/shifts${toQuery(params)}`);
 }

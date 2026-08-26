@@ -30,7 +30,6 @@ export type Employee = {
   monthlySalary: string | null;
   hoursPerDay: string;
   daysPerWeek: number;
-  hoursPerMonth: string;
   hiredAt: string;
   isActive: boolean;
 };
@@ -51,6 +50,7 @@ export type SickDay = {
   id: string;
   employeeId: string;
   date: string;
+  creditedHours?: string;
   note: string | null;
 };
 
@@ -64,6 +64,10 @@ export type EmployeeStats = {
   monthlyPay: string;
   totalBalance: string;
   paidOvertimeHours: string;
+  paidTotal: string;
+  paidBase: string;
+  paidOvertimeAmount: string;
+  hoursPerDay: string;
 };
 
 export type OverviewRow = {
@@ -86,11 +90,12 @@ export type CreateEmployeeBody = {
   monthlySalary?: string;
   hoursPerDay: string;
   daysPerWeek: number;
-  hoursPerMonth: string;
   hiredAt: string;
 };
 
 export type UpdateEmployeeBody = {
+  login?: string;
+  password?: string;
   firstName?: string;
   lastName?: string;
   payType?: PayType;
@@ -98,7 +103,6 @@ export type UpdateEmployeeBody = {
   monthlySalary?: string | null;
   hoursPerDay?: string;
   daysPerWeek?: number;
-  hoursPerMonth?: string;
   hiredAt?: string;
   isActive?: boolean;
 };
@@ -137,27 +141,9 @@ export type OvertimePayout = {
   note: string | null;
 };
 
-export type SalaryPayout = {
-  id: string;
-  employeeId: string;
-  year: number;
-  month: number;
-  amount: string;
-  paidAt: string;
-  note: string | null;
-};
-
 export type CreateOvertimePayoutBody = {
   date: string;
   hoursPaid: string;
   amount: string;
-  note?: string;
-};
-
-export type CreateSalaryPayoutBody = {
-  year: number;
-  month: number;
-  amount: string;
-  paidAt: string;
   note?: string;
 };

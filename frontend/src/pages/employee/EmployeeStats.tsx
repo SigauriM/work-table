@@ -39,11 +39,11 @@ export default function EmployeeStatsPage() {
       {!employeeId ? <p>No employee profile.</p> : null}
       <MonthPicker year={year} month={month} onChange={setYearMonth} />
       {error ? (
-        <p className="text-sm text-red-700" role="alert">
+        <p className="text-sm text-[var(--ts-under)]" role="alert">
           {error}
         </p>
       ) : null}
-      {loading ? <p className="text-sm text-neutral-500">Loading…</p> : null}
+      {loading ? <p className="text-sm text-[var(--ts-mute)]">Loading…</p> : null}
       <StatsBlock stats={stats} />
     </AppShell>
   );

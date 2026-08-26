@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { ApiError } from "../../api/client";
 import {
@@ -21,7 +21,6 @@ type CreateForm = {
   monthlySalary: string;
   hoursPerDay: string;
   daysPerWeek: string;
-  hoursPerMonth: string;
   hiredAt: string;
 };
 
@@ -35,7 +34,6 @@ const emptyCreate: CreateForm = {
   monthlySalary: "",
   hoursPerDay: "8",
   daysPerWeek: "5",
-  hoursPerMonth: "173.33",
   hiredAt: "",
 };
 
@@ -45,6 +43,18 @@ export default function AdminEmployees() {
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<CreateForm>(emptyCreate);
   const [createPending, setCreatePending] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const createDialogRef = useRef<HTMLDialogElement>(null);
+
+  function openCreate() {
+    setForm(emptyCreate);
+    setCreateError(null);
+    createDialogRef.current?.showModal();
+  }
+
+  function closeCreate() {
+    createDialogRef.current?.close();
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -66,7 +76,7 @@ export default function AdminEmployees() {
   async function onCreate(e: FormEvent) {
     e.preventDefault();
     setCreatePending(true);
-    setError(null);
+    setCreateError(null);
     try {
       const body: CreateEmployeeBody = {
         login: form.login.trim(),
@@ -76,7 +86,6 @@ export default function AdminEmployees() {
         payType: form.payType,
         hoursPerDay: form.hoursPerDay.trim(),
         daysPerWeek: Number(form.daysPerWeek),
-        hoursPerMonth: form.hoursPerMonth.trim(),
         hiredAt: utcDateToIso(form.hiredAt),
       };
       if (form.payType === "HOURLY") {
@@ -86,9 +95,10 @@ export default function AdminEmployees() {
       }
       await createEmployee(body);
       setForm(emptyCreate);
+      closeCreate();
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Create failed");
+      setCreateError(err instanceof ApiError ? err.message : "Create failed");
     } finally {
       setCreatePending(false);
     }
@@ -113,6 +123,10 @@ export default function AdminEmployees() {
         </p>
       ) : null}
       {loading ? <p className="text-sm text-neutral-500">Loading…</p> : null}
+
+      <button type="button" className={`${btnPrimary} self-start`} onClick={openCreate}>
+        Create employee
+      </button>
 
       <ul className="flex flex-col gap-2 md:hidden">
         {employees.map((emp) => (
@@ -180,11 +194,28 @@ export default function AdminEmployees() {
         </table>
       </div>
 
+      <dialog
+        ref={createDialogRef}
+        className="fixed inset-0 z-50 m-auto h-fit max-h-[min(90dvh,40rem)] w-[min(calc(100%-2rem),28rem)] flex-col overflow-hidden rounded border border-neutral-200 bg-white p-0 text-[var(--ts-ink)] shadow-lg backdrop:bg-black/40 open:flex"
+        onClose={() => {
+          setForm(emptyCreate);
+          setCreateError(null);
+        }}
+        onCancel={(e) => {
+          if (createPending) e.preventDefault();
+        }}
+      >
       <form
         onSubmit={onCreate}
-        className="flex flex-col gap-3 rounded border border-neutral-200 bg-white p-3"
+        className="flex min-h-0 max-h-full flex-col"
       >
+        <div className="flex flex-col gap-3 overflow-y-auto p-3">
         <h2 className="text-lg font-medium">Create employee</h2>
+        {createError ? (
+          <p className="text-sm text-red-700" role="alert">
+            {createError}
+          </p>
+        ) : null}
         <label className="flex flex-col gap-1 text-sm">
           Login
           <input
@@ -273,6 +304,9 @@ export default function AdminEmployees() {
               required
               disabled={createPending}
             />
+            <span className="text-xs text-[var(--ts-mute)]">
+              Daily norm. 10 h on an 8 h day is +2 overtime; 6 h is −2.
+            </span>
           </label>
           <label className="flex flex-1 flex-col gap-1 text-sm">
             Days/week
@@ -289,19 +323,6 @@ export default function AdminEmployees() {
           </label>
         </div>
         <label className="flex flex-col gap-1 text-sm">
-          Hours/month
-          <input
-            className={inputClass}
-            value={form.hoursPerMonth}
-            onChange={(e) => setForm((f) => ({ ...f, hoursPerMonth: e.target.value }))}
-            required
-            disabled={createPending}
-          />
-          <span className="text-xs text-neutral-500">
-            Changing this later rewrites past stats balances.
-          </span>
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
           Hired at (UTC date)
           <input
             type="date"
@@ -312,10 +333,22 @@ export default function AdminEmployees() {
             disabled={createPending}
           />
         </label>
-        <button type="submit" disabled={createPending} className={btnPrimary}>
-          {createPending ? "Creating…" : "Create"}
-        </button>
+        </div>
+        <div className="flex gap-2 border-t border-neutral-200 p-3">
+          <button
+            type="button"
+            className={btnSecondary}
+            disabled={createPending}
+            onClick={closeCreate}
+          >
+            Cancel
+          </button>
+          <button type="submit" disabled={createPending} className={btnPrimary}>
+            {createPending ? "Creating…" : "Create"}
+          </button>
+        </div>
       </form>
+      </dialog>
     </AppShell>
   );
 }

@@ -38,14 +38,12 @@ model Employee {
   monthlySalary  Decimal? @db.Decimal(10, 2)
   hoursPerDay    Decimal  @db.Decimal(4, 2)
   daysPerWeek    Int
-  hoursPerMonth  Decimal  @db.Decimal(6, 2)
   hiredAt        DateTime
   isActive       Boolean  @default(true)
 
   shifts          Shift[]
   sickDays        SickDay[]
   overtimePayouts OvertimePayout[]
-  salaryPayouts   SalaryPayout[]
 
   @@index([isActive])
 }
@@ -89,19 +87,6 @@ model OvertimePayout {
   note       String?
 
   @@index([employeeId, date])
-}
-
-model SalaryPayout {
-  id         String   @id @default(uuid())
-  employeeId String
-  employee   Employee @relation(fields: [employeeId], references: [id])
-  year       Int
-  month      Int
-  amount     Decimal  @db.Decimal(10, 2)
-  paidAt     DateTime
-  note       String?
-
-  @@unique([employeeId, year, month])
 }
 
 model RefreshToken {

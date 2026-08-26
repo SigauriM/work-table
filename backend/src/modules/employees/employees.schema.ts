@@ -20,7 +20,6 @@ export const createEmployeeSchema = z
     monthlySalary: z.string().optional(),
     hoursPerDay: z.string().min(1),
     daysPerWeek: z.number().int().min(1).max(7),
-    hoursPerMonth: z.string().min(1),
     hiredAt: z.coerce.date(),
   })
   .superRefine((data, ctx) => {
@@ -34,6 +33,8 @@ export const createEmployeeSchema = z
 
 export const updateEmployeeSchema = z
   .object({
+    login: z.string().min(1).optional(),
+    password: z.string().min(1).optional(),
     firstName: z.string().min(1).optional(),
     lastName: z.string().min(1).optional(),
     payType: payTypeSchema.optional(),
@@ -41,7 +42,6 @@ export const updateEmployeeSchema = z
     monthlySalary: z.string().nullable().optional(),
     hoursPerDay: z.string().min(1).optional(),
     daysPerWeek: z.number().int().min(1).max(7).optional(),
-    hoursPerMonth: z.string().min(1).optional(),
     hiredAt: z.coerce.date().optional(),
     isActive: z.boolean().optional(),
   })

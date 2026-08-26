@@ -37,11 +37,3 @@ export const createOvertimePayoutSchema = z.object({
   amount: positiveDecimalString(),
   note: z.string().optional(),
 });
-
-export const createSalaryPayoutSchema = z.object({
-  year: z.coerce.number().int().min(2000).max(2100),
-  month: z.coerce.number().int().min(1).max(12),
-  amount: positiveDecimalString(),
-  paidAt: z.coerce.date(),
-  note: z.string().optional(),
-});
