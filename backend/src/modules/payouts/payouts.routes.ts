@@ -23,7 +23,9 @@ payoutsRouter.get("/employees/:id/overtime-payouts", async (req, res, next) => {
 payoutsRouter.post("/employees/:id/overtime-payouts", async (req, res, next) => {
   try {
     const body = createOvertimePayoutSchema.parse(req.body);
-    res.status(201).json(await payoutsService.createOvertimePayout(req.params.id, body));
+    res.status(201).json(
+      await payoutsService.createOvertimePayout(req.params.id, body, req.user!.userId),
+    );
   } catch (err) {
     next(err);
   }
@@ -31,7 +33,11 @@ payoutsRouter.post("/employees/:id/overtime-payouts", async (req, res, next) => 
 
 payoutsRouter.delete("/employees/:id/overtime-payouts/:payoutId", async (req, res, next) => {
   try {
-    await payoutsService.deleteOvertimePayout(req.params.id, req.params.payoutId);
+    await payoutsService.deleteOvertimePayout(
+      req.params.id,
+      req.params.payoutId,
+      req.user!.userId,
+    );
     res.status(204).end();
   } catch (err) {
     next(err);

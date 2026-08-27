@@ -7,19 +7,19 @@ export function listOvertimePayouts(
   params?: { year: number; month: number },
 ) {
   return apiFetch<OvertimePayout[]>(
-    `/api/employees/${employeeId}/overtime-payouts${toQuery(params ?? {})}`,
+    `/api/v1/employees/${employeeId}/overtime-payouts${toQuery(params ?? {})}`,
   );
 }
 
 export function createOvertimePayout(employeeId: string, body: CreateOvertimePayoutBody) {
-  return apiFetch<OvertimePayout>(`/api/employees/${employeeId}/overtime-payouts`, {
+  return apiFetch<OvertimePayout>(`/api/v1/employees/${employeeId}/overtime-payouts`, {
     method: "POST",
     body,
   });
 }
 
 export function deleteOvertimePayout(employeeId: string, payoutId: string) {
-  return apiFetch<void>(`/api/employees/${employeeId}/overtime-payouts/${payoutId}`, {
+  return apiFetch<void>(`/api/v1/employees/${employeeId}/overtime-payouts/${payoutId}`, {
     method: "DELETE",
   });
 }

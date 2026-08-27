@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { BUILD_LABEL } from "../buildLabel";
+import { useI18n } from "../i18n/useI18n";
 import type { NavItem } from "./nav";
 
 function linkClass(active: boolean) {
@@ -25,6 +26,7 @@ export function AppShell({
   flush?: boolean;
 }) {
   const { user, logout } = useAuth();
+  const { t, locale, setLocale } = useI18n();
 
   return (
     <div className="min-h-dvh bg-[var(--ts-bg)] text-[var(--ts-ink)]">
@@ -42,17 +44,35 @@ export function AppShell({
               end={item.end}
               className={({ isActive }) => linkClass(isActive)}
             >
-              {item.label}
+              {t(item.labelKey)}
             </NavLink>
           ))}
         </nav>
-        <div className="p-2">
+        <div className="flex flex-col gap-1 p-2">
+          <div className="flex gap-1 px-1">
+            <button
+              type="button"
+              className={`min-h-11 flex-1 rounded text-xs font-semibold ${locale === "en" ? "text-[var(--ts-ink)]" : "text-[var(--ts-mute)]"}`}
+              aria-pressed={locale === "en"}
+              onClick={() => setLocale("en")}
+            >
+              EN
+            </button>
+            <button
+              type="button"
+              className={`min-h-11 flex-1 rounded text-xs font-semibold ${locale === "de" ? "text-[var(--ts-ink)]" : "text-[var(--ts-mute)]"}`}
+              aria-pressed={locale === "de"}
+              onClick={() => setLocale("de")}
+            >
+              DE
+            </button>
+          </div>
           <button
             type="button"
             className="flex min-h-11 w-full items-center justify-center rounded-full text-sm font-semibold text-[var(--ts-mute)]"
             onClick={() => void logout()}
           >
-            Log out
+            {t("logOut")}
           </button>
         </div>
       </aside>
@@ -96,7 +116,7 @@ export function AppShell({
                   }`
                 }
               >
-                {item.label}
+                {t(item.labelKey)}
               </NavLink>
             ))}
             <button
@@ -104,7 +124,7 @@ export function AppShell({
               className="flex min-h-11 items-center justify-center text-[var(--ts-mute)]"
               onClick={() => void logout()}
             >
-              Log out
+              {t("logOut")}
             </button>
           </div>
         </nav>

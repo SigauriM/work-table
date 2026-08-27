@@ -1,5 +1,29 @@
 # Known limitations (v1)
 
+## API prefix (`/api/v1`)
+
+Public JSON API is `/api/v1/...`. `/health` stays unversioned.
+
+Vite proxies `/api` to the backend **without stripping** the prefix, so the
+browser and Express both see `/api/v1/...`. Refresh cookie `Path=/api/v1/auth`
+matches `POST /api/v1/auth/refresh`. CSRF cookie stays `Path=/`.
+
+## Overview performance
+
+`GET /api/v1/stats/overview` loads employees (with terms), shifts, sick days,
+and overtime payouts in a fixed handful of queries, then computes in memory.
+It does not call `getEmployeeStats` per employee. There is no `MonthlyStats`
+table.
+
+Unbounded `GET /api/v1/shifts` (no `year`/`month`) returns
+`{ items, nextCursor }` with `take` default 50, max 100. With `year` and
+`month` the body is still a JSON array.
+
+Timed int test, 2026-08-27, Windows, Postgres 16 on localhost, 200 active
+HOURLY employees hired 2026-01-15, one March 2026 shift each, 20 samples after
+2 warmups: p95 ≈ 33 ms (min ≈ 29 ms, max ≈ 35 ms). Budget was p95 < 200 ms, so
+no cache.
+
 ## Overnight shifts and month boundary
 
 A shift may cross midnight (`endTime` on the next calendar day).
@@ -34,24 +58,25 @@ The API accepts `"YYYY-MM-DD"`. Do not send a Berlin-midnight instant.
 
 ## Refresh tokens are not rotated
 
+Refresh is an **httpOnly** cookie (`Path=/api/v1/auth`, `SameSite=Strict`). Login and
+refresh JSON do **not** include `refreshToken`; the SPA keeps access in memory
+only. CSRF double-submit (`csrf` cookie + `X-CSRF-Token`) applies only to
+`POST /api/v1/auth/refresh` and `POST /api/v1/auth/logout`.
+
 Stage 3 issued a **new** refresh token and revoked the old one on every
-`POST /auth/refresh`. That rotation is **not** what v1 does. Treat reuse of the
-same refresh string as intentional, not as a bug or a missed Stage 3 leftover.
+`POST /api/v1/auth/refresh`. That rotation is **not** what v1 does. The same refresh
+row is reused until logout, deactivation, password change, or expiry (7 days).
 
-`POST /auth/refresh` verifies the existing refresh token and returns a new access
-token plus **the same** refresh token. It does not revoke or replace the refresh
-row.
+Rotation stays off until F5, PWA autoUpdate, and LAN `http://192.168.x.x:5173`
+(`COOKIE_SECURE=false`) are confirmed. If rotation is turned back on, re-test
+those three. See `frontend/src/pwa.ts` and `refresh()` in
+`backend/src/modules/auth/auth.service.ts`.
 
-Revoke still happens on logout and on employee deactivation
-(`DELETE` / `PATCH isActive: false`).
+`Secure` is `COOKIE_SECURE` (default false). Dev and phone over HTTP need it
+false or the browser will not store the cookie.
 
-Reason rotation was dropped: if the tab reloaded (F5) before the response was
-stored, the new refresh was already consumed server-side and the browser still
-held the old one — hard logout. Reuse until expiry is the v1 tradeoff; a stolen
-refresh stays valid until logout, deactivation, or expiry (7 days).
+## Audit log (v1)
 
-The same race returns if rotation is restored later, and PWA `autoUpdate` makes
-it worse (old cached shell and new shell can both call refresh). If rotation is
-turned back on, re-test: install PWA → ship a new frontend build → the installed
-app must pick up the new version **without** logout. See `frontend/src/pwa.ts`
-and the comment on `refresh()` in `backend/src/modules/auth/auth.service.ts`.
+`AuditLog` is append-only. A `BEFORE UPDATE OR DELETE` trigger raises on any
+change, including by the same database user the app uses (`DATABASE_URL` =
+`POSTGRES_USER`). A separate application role is not in v1.

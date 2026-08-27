@@ -12,4 +12,5 @@ export const env = {
   jwtAccessSecret: required("JWT_ACCESS_SECRET"),
   jwtAccessExpires: process.env.JWT_ACCESS_EXPIRES ?? "15m",
   jwtRefreshDays: Number(process.env.JWT_REFRESH_DAYS ?? 7),
+  cookieSecure: process.env.COOKIE_SECURE === "true",
 };

@@ -1,10 +1,11 @@
 import { z } from "zod";
 import { calendarYmdSchema } from "../../core/calendarYmd.js";
+import { NOTE_MAX } from "../../core/stringFields.js";
 
 /**
- * endTime должен быть строго после startTime.
- * Смена может пересекать полночь: все workedMinutes относятся к полю date
- * (= календарный день начала смены), не к дню конца.
+ * endTime must be strictly after startTime.
+ * A shift may cross midnight: all workedMinutes belong to `date`
+ * (the calendar day the shift starts), not the end day.
  */
 function refineShiftTimes(
   data: {
@@ -53,11 +54,16 @@ function refineShiftTimes(
   }
 }
 
+export const LIST_SHIFTS_DEFAULT_TAKE = 50;
+export const LIST_SHIFTS_MAX_TAKE = 100;
+
 export const listShiftsQuerySchema = z
   .object({
     employeeId: z.string().uuid(),
     year: z.coerce.number().int().min(2000).max(2100).optional(),
     month: z.coerce.number().int().min(1).max(12).optional(),
+    cursor: z.string().uuid().optional(),
+    take: z.coerce.number().int().min(1).max(LIST_SHIFTS_MAX_TAKE).optional(),
   })
   .superRefine((data, ctx) => {
     const hasYear = data.year !== undefined;
@@ -67,6 +73,15 @@ export const listShiftsQuerySchema = z
         code: "custom",
         path: ["year"],
         message: "year and month must both be set or both omitted",
+      });
+    }
+    const hasCursor = data.cursor !== undefined;
+    const hasTake = data.take !== undefined;
+    if ((hasCursor || hasTake) && (hasYear || hasMonth)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["cursor"],
+        message: "cursor and take are only allowed without year and month",
       });
     }
   });
@@ -79,7 +94,7 @@ export const createShiftSchema = z
     endTime: z.coerce.date(),
     breakStart: z.coerce.date().nullish(),
     breakEnd: z.coerce.date().nullish(),
-    note: z.string().optional(),
+    note: z.string().max(NOTE_MAX).optional(),
   })
   .superRefine(refineShiftTimes);
 
@@ -90,10 +105,10 @@ export const updateShiftSchema = z
     endTime: z.coerce.date().optional(),
     breakStart: z.coerce.date().nullish(),
     breakEnd: z.coerce.date().nullish(),
-    note: z.string().nullish(),
+    note: z.string().max(NOTE_MAX).nullish(),
   })
   .superRefine((data, ctx) => {
-    // Полную проверку времён делаем в сервисе после merge со строкой в БД.
+    // Full time checks run in the service after merge with the DB row.
     const hasBreakStart = data.breakStart !== undefined && data.breakStart != null;
     const hasBreakEnd = data.breakEnd !== undefined && data.breakEnd != null;
     if (

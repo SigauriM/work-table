@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ApiError } from "../../api/client";
 import { getEmployee, updateEmployee } from "../../api/employees";
-import { deleteShift, listShifts } from "../../api/shifts";
+import { deleteShift, listShiftsPage } from "../../api/shifts";
 import { deleteSickDay, listSickDays } from "../../api/sickDays";
 import { employeeStats } from "../../api/stats";
 import {
@@ -85,13 +85,13 @@ export default function EmployeeDetail() {
 
       const [st, sh, sk, ot] = await Promise.all([
         employeeStats(id, year, month),
-        listShifts({ employeeId: id }),
+        listShiftsPage({ employeeId: id, take: 3 }),
         listSickDays({ employeeId: id, year, month }),
         listOvertimePayouts(id),
       ]);
       if (isCancelled?.()) return;
       setStats(st);
-      setShifts(sh);
+      setShifts(sh.items);
       setSickDays(sk);
       setOvertimePayouts(ot);
       setError(null);
@@ -440,7 +440,7 @@ export default function EmployeeDetail() {
               ) : null}
             </div>
             <ShiftList
-              shifts={shifts.slice(0, 3)}
+              shifts={shifts}
               loading={loading}
               onDelete={onDeleteShift}
             />

@@ -20,6 +20,9 @@ jobs:
       - run: npm ci
       - run: npx tsc -b
       - run: npx eslint . --max-warnings 0
+      - run: npm test
+      - run: npm run build
+      - run: npx size-limit
 
   backend:
     runs-on: ubuntu-latest
@@ -32,7 +35,10 @@ jobs:
         with:
           node-version: "22"
       - run: npm ci
-      - run: npm test
+      # Prisma CLI (not runtime). Revisit when prisma 6.x ships a fix without downgrade.
+      - run: npx audit-ci --config audit-ci.json
+      - run: npm run typecheck
+      - run: npm test -- --coverage
 
   backend-int:
     runs-on: ubuntu-latest
@@ -63,4 +69,54 @@ jobs:
           node-version: "22"
       - run: npm ci
       - run: npx prisma migrate deploy
-      - run: npm run test:int
+      - run: npm run test:int -- --coverage
+
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: worktable
+          POSTGRES_PASSWORD: worktable
+          POSTGRES_DB: worktable_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U worktable -d worktable_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://worktable:worktable@localhost:5432/worktable_test
+      JWT_ACCESS_SECRET: ci-e2e-jwt-access-secret
+      ADMIN_LOGIN: e2e-admin
+      ADMIN_PASSWORD: e2e-admin-pass12
+      COOKIE_SECURE: "false"
+      PORT: "3000"
+      E2E_API: http://127.0.0.1:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+        working-directory: backend
+      - run: npx prisma migrate deploy
+        working-directory: backend
+      - run: npx prisma db seed
+        working-directory: backend
+      - run: npx tsx src/index.ts &
+        working-directory: backend
+      - run: |
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:3000/health && exit 0
+            sleep 1
+          done
+          exit 1
+      - run: npm ci
+        working-directory: frontend
+      - run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - run: npm run test:e2e
+        working-directory: frontend

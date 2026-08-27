@@ -39,27 +39,27 @@ export function formatHours(hours: number) {
   return Number.isInteger(rounded) ? `${rounded} h` : `${rounded.toFixed(1)} h`;
 }
 
-export function formatMonthShort(year: number, month: number) {
+export function formatMonthShort(year: number, month: number, locale = "en-US") {
   const d = new Date(Date.UTC(year, month - 1, 1));
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat(locale, {
     month: "short",
     year: "numeric",
     timeZone: "Europe/Berlin",
   }).format(d);
 }
 
-export function formatMonthLong(year: number, month: number) {
+export function formatMonthLong(year: number, month: number, locale = "en-US") {
   const d = new Date(Date.UTC(year, month - 1, 1));
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat(locale, {
     month: "long",
     year: "numeric",
     timeZone: "Europe/Berlin",
   }).format(d);
 }
 
-export function formatDayTitle(dateYmd: string) {
+export function formatDayTitle(dateYmd: string, locale = "en-US") {
   const d = new Date(`${dateYmd}T00:00:00.000Z`);
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat(locale, {
     weekday: "short",
     month: "long",
     day: "numeric",
@@ -67,13 +67,20 @@ export function formatDayTitle(dateYmd: string) {
   }).format(d);
 }
 
-export function formatDayShort(dateYmd: string) {
+export function formatDayShort(dateYmd: string, locale = "en-US") {
   const d = new Date(`${dateYmd}T00:00:00.000Z`);
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat(locale, {
     month: "short",
     day: "numeric",
     timeZone: "Europe/Berlin",
   }).format(d);
+}
+
+export function weekdayLabels(locale: string): string[] {
+  const fmt = new Intl.DateTimeFormat(locale, { weekday: "short", timeZone: "UTC" });
+  return [1, 2, 3, 4, 5, 6, 7].map((dow) =>
+    fmt.format(new Date(Date.UTC(2026, 5, dow))),
+  );
 }
 
 export function weekdayNormHours(dateYmd: string, hoursPerDay: number) {

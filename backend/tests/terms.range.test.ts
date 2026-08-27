@@ -22,7 +22,7 @@ function period(from: string, to: string | null, extra?: Partial<TermsSlice>): T
 describe("applyTermsSplit", () => {
   it("updates in place when effectiveFrom equals the open validFrom", () => {
     const next = applyTermsSplit(
-      [period("2026-01-15", null)],
+      [period("2026-01-15", null, { id: "open-1" })],
       "2026-01-15",
       "2026-01-15",
       { ...eightHourly, hoursPerDay: new Decimal("6") },
@@ -31,6 +31,7 @@ describe("applyTermsSplit", () => {
     expect(next[0]!.validFrom).toBe("2026-01-15");
     expect(next[0]!.validTo).toBeNull();
     expect(next[0]!.hoursPerDay.toString()).toBe("6");
+    expect(next[0]!.id).toBe("open-1");
   });
 
   it("closes the open period the day before effectiveFrom and opens a new tail", () => {
@@ -49,15 +50,16 @@ describe("applyTermsSplit", () => {
 
   it("keeps already closed periods and only splits the open tail", () => {
     const next = applyTermsSplit(
-      [period("2026-01-15", "2026-02-28"), period("2026-03-01", null)],
+      [period("2026-01-15", "2026-02-28", { id: "closed-1" }), period("2026-03-01", null, { id: "open-1" })],
       "2026-01-15",
       "2026-04-01",
       { ...eightHourly, hoursPerDay: new Decimal("7") },
     );
-    expect(next[0]).toMatchObject({ validFrom: "2026-01-15", validTo: "2026-02-28" });
-    expect(next[1]).toMatchObject({ validFrom: "2026-03-01", validTo: "2026-03-31" });
+    expect(next[0]).toMatchObject({ id: "closed-1", validFrom: "2026-01-15", validTo: "2026-02-28" });
+    expect(next[1]).toMatchObject({ id: "open-1", validFrom: "2026-03-01", validTo: "2026-03-31" });
     expect(next[2]!.validFrom).toBe("2026-04-01");
     expect(next[2]!.validTo).toBeNull();
+    expect(next[2]!.id).toBeUndefined();
     expect(next[2]!.hoursPerDay.toString()).toBe("7");
   });
 

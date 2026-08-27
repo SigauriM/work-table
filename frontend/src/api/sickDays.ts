@@ -7,13 +7,13 @@ export function listSickDays(params: {
   year: number;
   month: number;
 }) {
-  return apiFetch<SickDay[]>(`/api/sick-days${toQuery(params)}`);
+  return apiFetch<SickDay[]>(`/api/v1/sick-days${toQuery(params)}`);
 }
 
 export function createSickDay(body: CreateSickDayBody) {
-  return apiFetch<SickDay>("/api/sick-days", { method: "POST", body });
+  return apiFetch<SickDay>("/api/v1/sick-days", { method: "POST", body });
 }
 
 export function deleteSickDay(id: string) {
-  return apiFetch<void>(`/api/sick-days/${id}`, { method: "DELETE" });
+  return apiFetch<void>(`/api/v1/sick-days/${id}`, { method: "DELETE" });
 }

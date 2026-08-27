@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { calendarYmdSchema } from "../../core/calendarYmd.js";
+import { NOTE_MAX } from "../../core/stringFields.js";
 
 export const listSickDaysQuerySchema = z.object({
   employeeId: z.string().uuid(),
@@ -10,5 +11,5 @@ export const listSickDaysQuerySchema = z.object({
 export const createSickDaySchema = z.object({
   employeeId: z.string().uuid(),
   date: calendarYmdSchema,
-  note: z.string().optional(),
+  note: z.string().max(NOTE_MAX).optional(),
 });

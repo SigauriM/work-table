@@ -1,10 +1,9 @@
 /**
  * Register the service worker only after session restore has finished.
- * autoUpdate reloads when a new shell is waiting; refresh stays in
- * localStorage (`worktable_refresh`), so restore must run again on the new
- * page — not mid-flight on the old one.
+ * autoUpdate reloads when a new shell is waiting. Refresh lives in an httpOnly
+ * cookie, not in JS, so a new bundle does not hold a stale refresh string.
  *
- * Never clear the refresh token from a SW event. `/api` is NetworkOnly.
+ * Never clear the refresh cookie from a SW event. `/api` is NetworkOnly.
  *
  * If refresh rotation is restored on the backend, this path is the regression
  * test: install → new build → app updates without logout.

@@ -9,6 +9,7 @@ import {
 } from "./terms.range.js";
 
 type TermsRow = {
+  id?: string;
   payType: PayType;
   hourlyRate: { toString(): string } | null;
   monthlySalary: { toString(): string } | null;
@@ -19,6 +20,7 @@ type TermsRow = {
 
 export function toSlice(row: TermsRow): TermsSlice {
   return {
+    ...(row.id ? { id: row.id } : {}),
     payType: row.payType,
     hourlyRate: row.hourlyRate == null ? null : new Decimal(row.hourlyRate.toString()),
     monthlySalary:
@@ -27,6 +29,41 @@ export function toSlice(row: TermsRow): TermsSlice {
     validFrom: ymdFromDateColumn(row.validFrom),
     validTo: row.validTo == null ? null : ymdFromDateColumn(row.validTo),
   };
+}
+
+export function termsAuditPayload(periods: TermsSlice[]) {
+  return periods.map((p) => ({
+    id: p.id ?? null,
+    validFrom: p.validFrom,
+    validTo: p.validTo,
+    payType: p.payType,
+    hourlyRate: p.hourlyRate?.toString() ?? null,
+    monthlySalary: p.monthlySalary?.toString() ?? null,
+    hoursPerDay: p.hoursPerDay.toString(),
+  }));
+}
+
+export function termsPersistOps(existingIds: Set<string>, next: TermsSlice[]) {
+  const updates: TermsSlice[] = [];
+  const inserts: TermsSlice[] = [];
+  const seen = new Set<string>();
+  for (const slice of next) {
+    if (slice.id) {
+      if (!existingIds.has(slice.id)) {
+        throw new TermsRuleError("Employee terms are invalid");
+      }
+      updates.push(slice);
+      seen.add(slice.id);
+    } else {
+      inserts.push(slice);
+    }
+  }
+  for (const id of existingIds) {
+    if (!seen.has(id)) {
+      throw new TermsRuleError("Cannot drop existing terms period");
+    }
+  }
+  return { updates, inserts };
 }
 
 export async function listTerms(
@@ -59,24 +96,42 @@ export async function createInitial(
   });
 }
 
+function termsWriteData(employeeId: string, p: TermsSlice) {
+  return {
+    employeeId,
+    payType: p.payType,
+    hourlyRate: p.hourlyRate?.toString() ?? null,
+    monthlySalary: p.monthlySalary?.toString() ?? null,
+    hoursPerDay: p.hoursPerDay.toString(),
+    validFrom: ymdToDateColumn(p.validFrom),
+    validTo: p.validTo == null ? null : ymdToDateColumn(p.validTo),
+  };
+}
+
 export async function persistSlices(
   tx: Prisma.TransactionClient,
   employeeId: string,
   next: TermsSlice[],
 ) {
-  await tx.employeeTerms.deleteMany({ where: { employeeId } });
-  if (next.length === 0) return;
-  await tx.employeeTerms.createMany({
-    data: next.map((p) => ({
-      employeeId,
-      payType: p.payType,
-      hourlyRate: p.hourlyRate?.toString() ?? null,
-      monthlySalary: p.monthlySalary?.toString() ?? null,
-      hoursPerDay: p.hoursPerDay.toString(),
-      validFrom: ymdToDateColumn(p.validFrom),
-      validTo: p.validTo == null ? null : ymdToDateColumn(p.validTo),
-    })),
+  const existing = await tx.employeeTerms.findMany({
+    where: { employeeId },
+    select: { id: true },
   });
+  const { updates, inserts } = termsPersistOps(
+    new Set(existing.map((row) => row.id)),
+    next,
+  );
+  for (const p of updates) {
+    await tx.employeeTerms.update({
+      where: { id: p.id! },
+      data: termsWriteData(employeeId, p),
+    });
+  }
+  for (const p of inserts) {
+    await tx.employeeTerms.create({
+      data: termsWriteData(employeeId, p),
+    });
+  }
 }
 
 export function mergeTermsPatch(

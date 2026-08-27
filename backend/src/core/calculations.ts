@@ -83,7 +83,7 @@ export function calculateMonthBalance(input: {
   return { workedHours, normHours, balance: workedHours.minus(normHours), hoursByYmd: hoursByDay };
 }
 
-/** Сумма месячных балансов минус выплаченные сверхурочные. Может быть < 0 (переплата). */
+/** Sum of monthly balances minus paid overtime hours. May be < 0 (overpayment). */
 export function calculateTotalBalance(input: {
   monthlyBalances: Decimal[];
   paidOvertimeHours: Decimal;
@@ -97,8 +97,8 @@ export function calculateTotalBalance(input: {
 
 /**
  * HOURLY → workedHours × hourlyRate
- * SALARY → monthlySalary (workedHours игнорируется)
- * Нет нужной ставки → throw (испорченные данные, не молчаливый 0).
+ * SALARY → monthlySalary (workedHours ignored)
+ * Missing rate → throw (corrupt data, not a silent 0).
  */
 export function calculateMonthlyPay(
   employee: PayEmployee,

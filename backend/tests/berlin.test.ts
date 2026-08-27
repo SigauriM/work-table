@@ -5,7 +5,9 @@ import {
   berlinYmd,
   berlinYearMonth,
   instantFromBerlin,
+  isCalendarMonthClosed,
   isWeekendYmd,
+  lastYmdOfMonth,
   monthDateRange,
   nextBerlinYmd,
   prevBerlinYmd,
@@ -92,6 +94,14 @@ describe("calendar helpers", () => {
     const dec = monthDateRange(2026, 12);
     expect(dec.gte.toISOString()).toBe("2026-12-01T00:00:00.000Z");
     expect(dec.lt.toISOString()).toBe("2027-01-01T00:00:00.000Z");
+  });
+
+  it("lastYmdOfMonth / closed month uses Berlin calendar YMD, not UTC today", () => {
+    expect(lastYmdOfMonth(2026, 2)).toBe("2026-02-28");
+    expect(lastYmdOfMonth(2026, 1)).toBe("2026-01-31");
+    expect(isCalendarMonthClosed(2026, 7, "2026-08-27")).toBe(true);
+    expect(isCalendarMonthClosed(2026, 8, "2026-08-27")).toBe(false);
+    expect(isCalendarMonthClosed(2026, 8, "2026-08-31")).toBe(true);
   });
 
   it("berlinPartsFromInstant round-trips a Berlin clock time", () => {

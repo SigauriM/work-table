@@ -4,12 +4,14 @@ import { PayType, Prisma, Role } from "@prisma/client";
 import { prisma } from "../../config/prisma.js";
 import { berlinYmd, ymdFromDateColumn, ymdToDateColumn } from "../../core/berlin.js";
 import { HttpError } from "../../middleware/errorHandler.js";
+import { writeAudit } from "../audit/audit.service.js";
 import { openPeriod, TermsRuleError, termsOnYmd, type TermsSlice } from "../terms/terms.range.js";
 import {
   applySplitForEmployee,
   createInitial,
   listTerms,
   mergeTermsPatch,
+  termsAuditPayload,
   toSlice,
 } from "../terms/terms.service.js";
 import type { z } from "zod";
@@ -58,6 +60,7 @@ function toPublic(
     isActive: boolean;
     user: { id: string; login: string; role: Role };
     terms: {
+      id: string;
       payType: PayType;
       hourlyRate: unknown;
       monthlySalary: unknown;
@@ -70,6 +73,7 @@ function toPublic(
 ) {
   const periods = employee.terms.map((row) =>
     toSlice({
+      id: row.id,
       payType: row.payType,
       hourlyRate: row.hourlyRate as { toString(): string } | null,
       monthlySalary: row.monthlySalary as { toString(): string } | null,
@@ -152,6 +156,7 @@ export async function createEmployee(input: CreateInput) {
           login: input.login,
           passwordHash,
           role: Role.EMPLOYEE,
+          mustChangePassword: true,
         },
       });
       const created = await tx.employee.create({
@@ -178,7 +183,7 @@ export async function createEmployee(input: CreateInput) {
   }
 }
 
-export async function updateEmployee(id: string, input: UpdateInput) {
+export async function updateEmployee(id: string, input: UpdateInput, actorUserId: string) {
   try {
     return await prisma.$transaction(async (tx) => {
       const existing = await tx.employee.findUnique({
@@ -194,11 +199,26 @@ export async function updateEmployee(id: string, input: UpdateInput) {
         if (input.login !== undefined) userData.login = input.login;
         if (input.password !== undefined) {
           userData.passwordHash = await bcrypt.hash(input.password, BCRYPT_ROUNDS);
+          userData.mustChangePassword = true;
         }
         await tx.user.update({
           where: { id: existing.userId },
           data: userData,
         });
+        if (input.password !== undefined) {
+          await tx.refreshToken.updateMany({
+            where: { userId: existing.userId },
+            data: { revokedAt: new Date() },
+          });
+          await writeAudit(tx, {
+            actorUserId,
+            action: "user.password.change",
+            entity: "User",
+            entityId: existing.userId,
+            before: null,
+            after: { refreshRevoked: true },
+          });
+        }
       }
 
       const data: Prisma.EmployeeUpdateInput = {};
@@ -239,12 +259,28 @@ export async function updateEmployee(id: string, input: UpdateInput) {
         }
         const next = mergeTermsPatch(open, input);
         await applySplitForEmployee(tx, existing.id, hiredYmd, input.effectiveFrom, next);
+        await writeAudit(tx, {
+          actorUserId,
+          action: "employee.terms",
+          entity: "Employee",
+          entityId: existing.id,
+          before: { terms: termsAuditPayload(periods) },
+          after: { terms: termsAuditPayload(await listTerms(tx, existing.id)) },
+        });
       }
 
       if (input.isActive === false) {
         await tx.refreshToken.updateMany({
           where: { userId: existing.userId },
           data: { revokedAt: new Date() },
+        });
+        await writeAudit(tx, {
+          actorUserId,
+          action: "employee.deactivate",
+          entity: "Employee",
+          entityId: existing.id,
+          before: { isActive: existing.isActive },
+          after: { isActive: false },
         });
       }
 
@@ -266,7 +302,7 @@ export async function updateEmployee(id: string, input: UpdateInput) {
   }
 }
 
-export async function deactivateEmployee(id: string) {
+export async function deactivateEmployee(id: string, actorUserId: string) {
   const employee = await prisma.$transaction(async (tx) => {
     const current = await tx.employee.findUnique({
       where: { id },
@@ -283,6 +319,14 @@ export async function deactivateEmployee(id: string) {
     await tx.refreshToken.updateMany({
       where: { userId: current.userId },
       data: { revokedAt: new Date() },
+    });
+    await writeAudit(tx, {
+      actorUserId,
+      action: "employee.deactivate",
+      entity: "Employee",
+      entityId: current.id,
+      before: { isActive: current.isActive },
+      after: { isActive: false },
     });
     return updated;
   });

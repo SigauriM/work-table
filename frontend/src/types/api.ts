@@ -5,11 +5,11 @@ export type PublicUser = {
   login: string;
   role: Role;
   employeeId: string | null;
+  mustChangePassword: boolean;
 };
 
 export type AuthResponse = {
   accessToken: string;
-  refreshToken: string;
   user: PublicUser;
 };
 
@@ -54,6 +54,11 @@ export type Shift = {
   breakEnd: string | null;
   workedMinutes: number;
   note: string | null;
+};
+
+export type ShiftPage = {
+  items: Shift[];
+  nextCursor: string | null;
 };
 
 export type SickDay = {

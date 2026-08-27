@@ -1,4 +1,4 @@
-const REFRESH_KEY = "worktable_refresh";
+const CSRF_COOKIE = "csrf";
 
 let accessToken: string | null = null;
 
@@ -9,15 +9,16 @@ export function setAccessToken(token: string | null) {
   accessToken = token;
 }
 
-export function getRefreshToken() {
-  return localStorage.getItem(REFRESH_KEY);
-}
-export function setRefreshToken(token: string | null) {
-  if (token == null) localStorage.removeItem(REFRESH_KEY);
-  else localStorage.setItem(REFRESH_KEY, token);
+export function getCsrfToken(): string | null {
+  const match = document.cookie.match(new RegExp(`(?:^|; )${CSRF_COOKIE}=([^;]*)`));
+  if (!match) return null;
+  try {
+    return decodeURIComponent(match[1]!);
+  } catch {
+    return match[1]!;
+  }
 }
 
 export function clearSession() {
   accessToken = null;
-  localStorage.removeItem(REFRESH_KEY);
 }

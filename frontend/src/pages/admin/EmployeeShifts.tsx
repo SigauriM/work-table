@@ -2,34 +2,39 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ApiError } from "../../api/client";
 import { getEmployee } from "../../api/employees";
-import { deleteShift, listShifts } from "../../api/shifts";
+import { deleteShift, listShiftsPage } from "../../api/shifts";
 import { AppShell } from "../../components/AppShell";
 import { adminNav } from "../../components/nav";
 import { ShiftList } from "../../components/ShiftList";
 import type { Employee, Shift } from "../../types/api";
+import { btnSecondary } from "../../ui";
 
 export default function EmployeeShifts() {
   const { id } = useParams<{ id: string }>();
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [shifts, setShifts] = useState<Shift[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async (isCancelled?: () => boolean) => {
     if (!id) return;
     try {
-      const [emp, sh] = await Promise.all([
+      const [emp, page] = await Promise.all([
         getEmployee(id),
-        listShifts({ employeeId: id }),
+        listShiftsPage({ employeeId: id }),
       ]);
       if (isCancelled?.()) return;
       setEmployee(emp);
-      setShifts(sh);
+      setShifts(page.items);
+      setNextCursor(page.nextCursor);
       setError(null);
     } catch (err) {
       if (isCancelled?.()) return;
       setEmployee(null);
       setShifts([]);
+      setNextCursor(null);
       setError(err instanceof ApiError ? err.message : "Failed to load");
     } finally {
       if (!isCancelled?.()) setLoading(false);
@@ -55,6 +60,20 @@ export default function EmployeeShifts() {
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Delete failed");
+    }
+  }
+
+  async function onLoadMore() {
+    if (!id || !nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const page = await listShiftsPage({ employeeId: id, cursor: nextCursor });
+      setShifts((prev) => [...prev, ...page.items]);
+      setNextCursor(page.nextCursor);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to load");
+    } finally {
+      setLoadingMore(false);
     }
   }
 
@@ -84,6 +103,16 @@ export default function EmployeeShifts() {
       <section className="flex flex-col gap-2">
         <h2 className="text-lg font-medium">Shifts</h2>
         <ShiftList shifts={shifts} loading={loading} onDelete={onDeleteShift} />
+        {nextCursor ? (
+          <button
+            type="button"
+            className={btnSecondary}
+            disabled={loadingMore}
+            onClick={() => void onLoadMore()}
+          >
+            {loadingMore ? "Loading…" : "Load more"}
+          </button>
+        ) : null}
       </section>
     </AppShell>
   );

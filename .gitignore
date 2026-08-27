@@ -9,3 +9,10 @@ backend/refresh.json
 backend/refresh-ivan.json
 backend/create-emp.json
 backend/patch-*.json
+
+coverage
+backend/coverage/
+backend/shift.json
+backend/shift-*.json
+backend/sick.json
+backend/sick-*.json

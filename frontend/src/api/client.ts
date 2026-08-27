@@ -1,10 +1,4 @@
-import {
-  clearSession,
-  getAccessToken,
-  getRefreshToken,
-  setAccessToken,
-  setRefreshToken,
-} from "../auth/session";
+import { clearSession, getAccessToken, getCsrfToken, setAccessToken } from "../auth/session";
 import type { AuthResponse } from "../types/api";
 
 export class ApiError extends Error {
@@ -26,33 +20,29 @@ async function parseError(res: Response): Promise<ApiError> {
 
 let refreshInFlight: Promise<AuthResponse | null> | null = null;
 
-/** Один POST /auth/refresh на всех; параллельные вызовы ждут тот же Promise.
- * Нужен и для PWA: старый и новый бандл не должны параллельно гасить refresh,
- * если ротацию когда-нибудь вернут (сейчас бэк отдаёт тот же refresh). */
+/** One POST /api/v1/auth/refresh for everyone; parallel callers wait on the same Promise.
+ * Refresh lives in an httpOnly cookie, not JS — F5 and PWA autoUpdate do not keep
+ * a stale string in localStorage. */
 export function refreshSession(): Promise<AuthResponse | null> {
   if (refreshInFlight) return refreshInFlight;
 
   refreshInFlight = (async () => {
-    const refreshToken = getRefreshToken();
-    if (!refreshToken) return null;
+    const csrf = getCsrfToken();
+    if (!csrf) return null;
 
-    const res = await fetch("/api/auth/refresh", {
+    const res = await fetch("/api/v1/auth/refresh", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refreshToken }),
+      credentials: "include",
+      headers: { "X-CSRF-Token": csrf },
     });
 
     if (!res.ok) {
-      // Второй запрос после ротации: не трогать уже записанный новый refresh.
-      if (getRefreshToken() === refreshToken) {
-        clearSession();
-      }
+      clearSession();
       return null;
     }
 
     const data = (await res.json()) as AuthResponse;
     setAccessToken(data.accessToken);
-    setRefreshToken(data.refreshToken);
     return data;
   })().finally(() => {
     refreshInFlight = null;
@@ -65,17 +55,23 @@ type ApiOptions = Omit<RequestInit, "body"> & {
   body?: unknown;
   skipAuth?: boolean;
   _retried?: boolean;
+  csrf?: boolean;
 };
 
 export async function apiFetch<T = unknown>(
   path: string,
   options: ApiOptions = {},
 ): Promise<T> {
-  const { body, skipAuth, _retried, headers: initHeaders, ...rest } = options;
+  const { body, skipAuth, _retried, csrf, headers: initHeaders, ...rest } = options;
   const headers = new Headers(initHeaders);
 
   if (body !== undefined && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
+  }
+
+  if (csrf) {
+    const token = getCsrfToken();
+    if (token) headers.set("X-CSRF-Token", token);
   }
 
   if (!skipAuth) {
@@ -83,7 +79,7 @@ export async function apiFetch<T = unknown>(
     if (access) headers.set("Authorization", `Bearer ${access}`);
   }
 
-  const res = await fetch(path.startsWith("/api") ? path : `/api${path}`, {
+  const res = await fetch(path.startsWith("/api") ? path : `/api/v1${path}`, {
     ...rest,
     headers,
     body: body === undefined ? undefined : JSON.stringify(body),

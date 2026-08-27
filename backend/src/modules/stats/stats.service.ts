@@ -6,7 +6,7 @@ import {
   calculatePaidMoney,
   calculateTotalBalance,
 } from "../../core/calculations.js";
-import { monthDateRange, parseYmd, berlinYmd, ymdFromDateColumn, ymdToDateColumn } from "../../core/berlin.js";
+import { monthDateRange, parseYmd, berlinYmd, lastYmdOfMonth, ymdFromDateColumn, ymdToDateColumn } from "../../core/berlin.js";
 import { HttpError } from "../../middleware/errorHandler.js";
 import {
   periodsOverlapMonth,
@@ -30,10 +30,6 @@ function ymKey(year: number, month: number): string {
 
 function decStr(value: Decimal): string {
   return value.toString();
-}
-
-function lastYmdOfMonth(year: number, month: number): string {
-  return ymdFromDateColumn(new Date(Date.UTC(year, month, 0)));
 }
 
 function monthCountWindow(
@@ -93,52 +89,35 @@ function serializeTerm(period: TermsSlice) {
   };
 }
 
-export async function getEmployeeStats(employeeId: string, year: number, month: number) {
-  const employee = await prisma.employee.findUnique({
-    where: { id: employeeId },
-    include: {
-      user: { select: { login: true } },
-      terms: { orderBy: { validFrom: "asc" } },
-    },
-  });
-  if (!employee) {
-    throw new HttpError(404, "Not found");
-  }
+type LoadedEmployee = {
+  id: string;
+  hiredAt: Date;
+  firstName: string;
+  lastName: string;
+  user: { login: string };
+  terms: Parameters<typeof toSlice>[0][];
+};
 
+type ShiftMinutesRow = { date: Date; workedMinutes: number };
+type SickDateRow = { date: Date };
+type PayoutMoneyRow = { hoursPaid: { toString(): string }; amount: { toString(): string } };
+
+function computeEmployeeStats(
+  employee: LoadedEmployee,
+  year: number,
+  month: number,
+  shifts: ShiftMinutesRow[],
+  sickDays: SickDateRow[],
+  overtimePayouts: PayoutMoneyRow[],
+  todayYmd: string,
+) {
   const hired = yearMonthFromDateColumn(employee.hiredAt);
   if (monthIndex(year, month) < monthIndex(hired.year, hired.month)) {
-    throw new HttpError(404, "Not found");
+    return null;
   }
 
   const periods = employee.terms.map(toSlice);
-  const rangeStart = monthDateRange(hired.year, hired.month).gte;
-  const rangeEnd = monthDateRange(year, month).lt;
-
-  const [shifts, sickDays, overtimePayouts] = await Promise.all([
-    prisma.shift.findMany({
-      where: {
-        employeeId,
-        date: { gte: rangeStart, lt: rangeEnd },
-      },
-      select: { date: true, workedMinutes: true },
-    }),
-    prisma.sickDay.findMany({
-      where: {
-        employeeId,
-        date: { gte: rangeStart, lt: rangeEnd },
-      },
-      select: { date: true },
-    }),
-    prisma.overtimePayout.findMany({
-      where: {
-        employeeId,
-        date: { lt: rangeEnd },
-      },
-      select: { hoursPaid: true, amount: true },
-    }),
-  ]);
-
-  const shiftsByMonth = new Map<string, { date: Date; workedMinutes: number }[]>();
+  const shiftsByMonth = new Map<string, ShiftMinutesRow[]>();
   for (const s of shifts) {
     const { year: y, month: m } = yearMonthFromDateColumn(s.date);
     const key = ymKey(y, m);
@@ -147,7 +126,7 @@ export async function getEmployeeStats(employeeId: string, year: number, month: 
     shiftsByMonth.set(key, list);
   }
 
-  const sickByMonth = new Map<string, { date: Date }[]>();
+  const sickByMonth = new Map<string, SickDateRow[]>();
   for (const d of sickDays) {
     const { year: y, month: m } = yearMonthFromDateColumn(d.date);
     const key = ymKey(y, m);
@@ -156,7 +135,6 @@ export async function getEmployeeStats(employeeId: string, year: number, month: 
     sickByMonth.set(key, list);
   }
 
-  const todayYmd = berlinYmd(new Date());
   const todayTerms = termsOnYmd(periods, todayYmd) ?? termsOnYmd(periods, ymdFromDateColumn(employee.hiredAt));
   if (!todayTerms) {
     throw new HttpError(500, "Internal server error");
@@ -219,12 +197,12 @@ export async function getEmployeeStats(employeeId: string, year: number, month: 
       }
     }
   } catch (err) {
-    console.error("pay calculation failed", { employeeId, err });
+    console.error("pay calculation failed", { employeeId: employee.id, err });
     throw new HttpError(500, "Internal server error");
   }
 
   if (!selected) {
-    throw new HttpError(404, "Not found");
+    return null;
   }
 
   let paidOvertimeHours = new Decimal(0);
@@ -246,7 +224,7 @@ export async function getEmployeeStats(employeeId: string, year: number, month: 
       overtimePayoutAmount,
     });
   } catch (err) {
-    console.error("pay calculation failed", { employeeId, err });
+    console.error("pay calculation failed", { employeeId: employee.id, err });
     throw new HttpError(500, "Internal server error");
   }
 
@@ -274,20 +252,152 @@ export async function getEmployeeStats(employeeId: string, year: number, month: 
   };
 }
 
+export async function getEmployeeStats(employeeId: string, year: number, month: number) {
+  const employee = await prisma.employee.findUnique({
+    where: { id: employeeId },
+    include: {
+      user: { select: { login: true } },
+      terms: { orderBy: { validFrom: "asc" } },
+    },
+  });
+  if (!employee) {
+    throw new HttpError(404, "Not found");
+  }
+
+  const hired = yearMonthFromDateColumn(employee.hiredAt);
+  if (monthIndex(year, month) < monthIndex(hired.year, hired.month)) {
+    throw new HttpError(404, "Not found");
+  }
+
+  const rangeStart = monthDateRange(hired.year, hired.month).gte;
+  const rangeEnd = monthDateRange(year, month).lt;
+  const todayYmd = berlinYmd(new Date());
+
+  const [shifts, sickDays, overtimePayouts] = await Promise.all([
+    prisma.shift.findMany({
+      where: {
+        employeeId,
+        date: { gte: rangeStart, lt: rangeEnd },
+      },
+      select: { date: true, workedMinutes: true },
+    }),
+    prisma.sickDay.findMany({
+      where: {
+        employeeId,
+        date: { gte: rangeStart, lt: rangeEnd },
+      },
+      select: { date: true },
+    }),
+    prisma.overtimePayout.findMany({
+      where: {
+        employeeId,
+        date: { lt: rangeEnd },
+      },
+      select: { hoursPaid: true, amount: true },
+    }),
+  ]);
+
+  const stats = computeEmployeeStats(
+    employee,
+    year,
+    month,
+    shifts,
+    sickDays,
+    overtimePayouts,
+    todayYmd,
+  );
+  if (!stats) {
+    throw new HttpError(404, "Not found");
+  }
+  return stats;
+}
+
 export async function getStatsOverview(year: number, month: number) {
   const employees = await prisma.employee.findMany({
     where: { isActive: true },
-    include: { user: { select: { login: true } } },
+    include: {
+      user: { select: { login: true } },
+      terms: { orderBy: { validFrom: "asc" } },
+    },
     orderBy: { lastName: "asc" },
   });
 
-  const rows = [];
-  for (const employee of employees) {
+  const included = employees.filter((employee) => {
     const hired = yearMonthFromDateColumn(employee.hiredAt);
-    if (monthIndex(year, month) < monthIndex(hired.year, hired.month)) {
-      continue;
-    }
-    const stats = await getEmployeeStats(employee.id, year, month);
+    return monthIndex(year, month) >= monthIndex(hired.year, hired.month);
+  });
+  if (included.length === 0) {
+    return [];
+  }
+
+  const ids = included.map((e) => e.id);
+  let rangeStart = monthDateRange(
+    yearMonthFromDateColumn(included[0]!.hiredAt).year,
+    yearMonthFromDateColumn(included[0]!.hiredAt).month,
+  ).gte;
+  for (const employee of included) {
+    const hired = yearMonthFromDateColumn(employee.hiredAt);
+    const start = monthDateRange(hired.year, hired.month).gte;
+    if (start < rangeStart) rangeStart = start;
+  }
+  const rangeEnd = monthDateRange(year, month).lt;
+  const todayYmd = berlinYmd(new Date());
+
+  const [shifts, sickDays, overtimePayouts] = await Promise.all([
+    prisma.shift.findMany({
+      where: {
+        employeeId: { in: ids },
+        date: { gte: rangeStart, lt: rangeEnd },
+      },
+      select: { employeeId: true, date: true, workedMinutes: true },
+    }),
+    prisma.sickDay.findMany({
+      where: {
+        employeeId: { in: ids },
+        date: { gte: rangeStart, lt: rangeEnd },
+      },
+      select: { employeeId: true, date: true },
+    }),
+    prisma.overtimePayout.findMany({
+      where: {
+        employeeId: { in: ids },
+        date: { lt: rangeEnd },
+      },
+      select: { employeeId: true, hoursPaid: true, amount: true },
+    }),
+  ]);
+
+  const shiftsByEmp = new Map<string, ShiftMinutesRow[]>();
+  for (const row of shifts) {
+    const list = shiftsByEmp.get(row.employeeId) ?? [];
+    list.push({ date: row.date, workedMinutes: row.workedMinutes });
+    shiftsByEmp.set(row.employeeId, list);
+  }
+  const sickByEmp = new Map<string, SickDateRow[]>();
+  for (const row of sickDays) {
+    const list = sickByEmp.get(row.employeeId) ?? [];
+    list.push({ date: row.date });
+    sickByEmp.set(row.employeeId, list);
+  }
+  const payoutsByEmp = new Map<string, PayoutMoneyRow[]>();
+  for (const row of overtimePayouts) {
+    const list = payoutsByEmp.get(row.employeeId) ?? [];
+    list.push({ hoursPaid: row.hoursPaid, amount: row.amount });
+    payoutsByEmp.set(row.employeeId, list);
+  }
+
+  const rows = [];
+  for (const employee of included) {
+    const stats = computeEmployeeStats(
+      employee,
+      year,
+      month,
+      shiftsByEmp.get(employee.id) ?? [],
+      sickByEmp.get(employee.id) ?? [],
+      payoutsByEmp.get(employee.id) ?? [],
+      todayYmd,
+    );
+    if (!stats) continue;
     rows.push({
       employeeId: employee.id,
       login: employee.user.login,

@@ -8,25 +8,25 @@ import type {
 
 export function listEmployees(isActive?: boolean) {
   return apiFetch<Employee[]>(
-    `/api/employees${toQuery({
+    `/api/v1/employees${toQuery({
       isActive: isActive === undefined ? undefined : String(isActive),
     })}`,
   );
 }
 
 export function getEmployee(id: string) {
-  return apiFetch<Employee>(`/api/employees/${id}`);
+  return apiFetch<Employee>(`/api/v1/employees/${id}`);
 }
 
 export function createEmployee(body: CreateEmployeeBody) {
-  return apiFetch<Employee>("/api/employees", { method: "POST", body });
+  return apiFetch<Employee>("/api/v1/employees", { method: "POST", body });
 }
 
 export function updateEmployee(id: string, body: UpdateEmployeeBody) {
-  return apiFetch<Employee>(`/api/employees/${id}`, { method: "PATCH", body });
+  return apiFetch<Employee>(`/api/v1/employees/${id}`, { method: "PATCH", body });
 }
 
-/** Мягкое удаление = isActive false + revoke refresh */
+/** Soft delete = isActive false + revoke refresh */
 export function deactivateEmployee(id: string) {
-  return apiFetch<Employee>(`/api/employees/${id}`, { method: "DELETE" });
+  return apiFetch<Employee>(`/api/v1/employees/${id}`, { method: "DELETE" });
 }

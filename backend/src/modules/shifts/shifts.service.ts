@@ -2,17 +2,21 @@ import { Prisma, Role } from "@prisma/client";
 import { prisma } from "../../config/prisma.js";
 import {
   assertShiftOnBerlinDate,
+  berlinYmd,
+  isYmdInClosedMonth,
   monthDateRange,
   ymdFromDateColumn,
   ymdToDateColumn,
 } from "../../core/berlin.js";
 import { calculateWorkedMinutes } from "../../core/calculations.js";
 import { HttpError } from "../../middleware/errorHandler.js";
+import { writeAudit } from "../audit/audit.service.js";
 import type { z } from "zod";
-import type {
-  createShiftSchema,
-  listShiftsQuerySchema,
-  updateShiftSchema,
+import {
+  LIST_SHIFTS_DEFAULT_TAKE,
+  type createShiftSchema,
+  type listShiftsQuerySchema,
+  type updateShiftSchema,
 } from "./shifts.schema.js";
 
 type Actor = {
@@ -33,7 +37,7 @@ function requireShiftOnBerlinDate(dateYmd: string, startTime: Date, endTime: Dat
   }
 }
 
-/** Смена через полночь ок; минуты относятся к date (день начала). */
+/** Overnight shift is allowed; minutes belong to `date` (start day). */
 function assertShiftTimes(input: {
   startTime: Date;
   endTime: Date;
@@ -75,6 +79,36 @@ function assertCanAccess(actor: Actor, rowEmployeeId: string) {
   }
 }
 
+function assertMonthWritable(actor: Actor, dateYmd: string) {
+  if (isYmdInClosedMonth(dateYmd, berlinYmd(new Date())) && actor.role !== Role.ADMIN) {
+    throw new HttpError(409, "Month is closed");
+  }
+}
+
+function shiftAuditPayload(row: {
+  id: string;
+  employeeId: string;
+  date: Date;
+  startTime: Date;
+  endTime: Date;
+  breakStart: Date | null;
+  breakEnd: Date | null;
+  workedMinutes: number;
+  note: string | null;
+}) {
+  return {
+    id: row.id,
+    employeeId: row.employeeId,
+    date: ymdFromDateColumn(row.date),
+    startTime: row.startTime.toISOString(),
+    endTime: row.endTime.toISOString(),
+    breakStart: row.breakStart?.toISOString() ?? null,
+    breakEnd: row.breakEnd?.toISOString() ?? null,
+    workedMinutes: row.workedMinutes,
+    note: row.note,
+  };
+}
+
 /** Same employee, overlapping instants. Adjacent end==start is allowed. */
 async function assertNoOverlappingShift(
   tx: Prisma.TransactionClient,
@@ -108,13 +142,33 @@ export async function listShifts(query: ListQuery) {
       orderBy: [{ date: "asc" }, { startTime: "asc" }],
     });
   }
-  return prisma.shift.findMany({
+
+  const take = query.take ?? LIST_SHIFTS_DEFAULT_TAKE;
+  if (query.cursor) {
+    const current = await prisma.shift.findFirst({
+      where: { id: query.cursor, employeeId: query.employeeId },
+      select: { id: true },
+    });
+    if (!current) {
+      throw new HttpError(400, "Invalid cursor");
+    }
+  }
+
+  const rows = await prisma.shift.findMany({
     where: { employeeId: query.employeeId },
-    orderBy: [{ date: "desc" }, { startTime: "desc" }],
+    orderBy: [{ date: "desc" }, { startTime: "desc" }, { id: "desc" }],
+    take: take + 1,
+    ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
   });
+  const hasMore = rows.length > take;
+  const items = hasMore ? rows.slice(0, take) : rows;
+  return {
+    items,
+    nextCursor: hasMore ? items[items.length - 1]!.id : null,
+  };
 }
 
-export async function createShift(input: CreateInput) {
+export async function createShift(input: CreateInput, actorUserId: string) {
   const date = ymdToDateColumn(input.date);
   assertShiftTimes(input);
   requireShiftOnBerlinDate(input.date, input.startTime, input.endTime);
@@ -139,7 +193,7 @@ export async function createShift(input: CreateInput) {
 
     await assertNoOverlappingShift(tx, input.employeeId, input.startTime, input.endTime);
 
-    return tx.shift.create({
+    const created = await tx.shift.create({
       data: {
         employeeId: input.employeeId,
         date,
@@ -151,6 +205,15 @@ export async function createShift(input: CreateInput) {
         note: input.note ?? null,
       },
     });
+    await writeAudit(tx, {
+      actorUserId,
+      action: "shift.create",
+      entity: "Shift",
+      entityId: created.id,
+      before: null,
+      after: shiftAuditPayload(created),
+    });
+    return created;
   });
 }
 
@@ -162,6 +225,7 @@ export async function updateShift(id: string, input: UpdateInput, actor: Actor) 
     }
     assertCanAccess(actor, current.employeeId);
     await assertEmployeeWritable(tx, current.employeeId);
+    assertMonthWritable(actor, ymdFromDateColumn(current.date));
 
     const dateYmd = input.date ?? ymdFromDateColumn(current.date);
     const next = {
@@ -176,6 +240,7 @@ export async function updateShift(id: string, input: UpdateInput, actor: Actor) 
 
     assertShiftTimes(next);
     requireShiftOnBerlinDate(dateYmd, next.startTime, next.endTime);
+    assertMonthWritable(actor, dateYmd);
 
     const dateChanged = next.date.getTime() !== current.date.getTime();
     if (dateChanged) {
@@ -215,7 +280,7 @@ export async function updateShift(id: string, input: UpdateInput, actor: Actor) 
         })
       : current.workedMinutes;
 
-    return tx.shift.update({
+    const updated = await tx.shift.update({
       where: { id: current.id },
       data: {
         date: next.date,
@@ -227,14 +292,34 @@ export async function updateShift(id: string, input: UpdateInput, actor: Actor) 
         workedMinutes,
       },
     });
+    await writeAudit(tx, {
+      actorUserId: actor.userId,
+      action: "shift.update",
+      entity: "Shift",
+      entityId: updated.id,
+      before: shiftAuditPayload(current),
+      after: shiftAuditPayload(updated),
+    });
+    return updated;
   });
 }
 
 export async function deleteShift(id: string, actor: Actor) {
-  const current = await prisma.shift.findUnique({ where: { id } });
-  if (!current) {
-    throw new HttpError(404, "Not found");
-  }
-  assertCanAccess(actor, current.employeeId);
-  await prisma.shift.delete({ where: { id: current.id } });
+  await prisma.$transaction(async (tx) => {
+    const current = await tx.shift.findUnique({ where: { id } });
+    if (!current) {
+      throw new HttpError(404, "Not found");
+    }
+    assertCanAccess(actor, current.employeeId);
+    assertMonthWritable(actor, ymdFromDateColumn(current.date));
+    await tx.shift.delete({ where: { id: current.id } });
+    await writeAudit(tx, {
+      actorUserId: actor.userId,
+      action: "shift.delete",
+      entity: "Shift",
+      entityId: current.id,
+      before: shiftAuditPayload(current),
+      after: null,
+    });
+  });
 }

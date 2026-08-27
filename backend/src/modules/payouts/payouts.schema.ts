@@ -1,19 +1,6 @@
-import { Decimal } from "decimal.js";
 import { z } from "zod";
 import { calendarYmdSchema } from "../../core/calendarYmd.js";
-
-function positiveDecimalString() {
-  return z.string().min(1).superRefine((val, ctx) => {
-    try {
-      const d = new Decimal(val);
-      if (!d.isFinite() || d.lte(0)) {
-        ctx.addIssue({ code: "custom", message: "Must be > 0" });
-      }
-    } catch {
-      ctx.addIssue({ code: "custom", message: "Must be > 0" });
-    }
-  });
-}
+import { moneyStringSchema, NOTE_MAX } from "../../core/stringFields.js";
 
 export const listPayoutsQuerySchema = z
   .object({
@@ -34,7 +21,7 @@ export const listPayoutsQuerySchema = z
 
 export const createOvertimePayoutSchema = z.object({
   date: calendarYmdSchema,
-  hoursPaid: positiveDecimalString(),
-  amount: positiveDecimalString(),
-  note: z.string().optional(),
+  hoursPaid: moneyStringSchema,
+  amount: moneyStringSchema,
+  note: z.string().max(NOTE_MAX).optional(),
 });

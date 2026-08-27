@@ -1,11 +1,13 @@
-export type NavItem = { to: string; label: string; end?: boolean };
+import type { MsgKey } from "../i18n/messages";
+
+export type NavItem = { to: string; labelKey: MsgKey; end?: boolean };
 
 export const employeeNav: NavItem[] = [
-  { to: "/employee", label: "Timesheet", end: true },
-  { to: "/employee/stats", label: "Stats" },
+  { to: "/employee", labelKey: "navTimesheet", end: true },
+  { to: "/employee/stats", labelKey: "navStats" },
 ];
 
 export const adminNav: NavItem[] = [
-  { to: "/admin", label: "Overview", end: true },
-  { to: "/admin/employees", label: "Employees" },
+  { to: "/admin", labelKey: "navOverview", end: true },
+  { to: "/admin/employees", labelKey: "navEmployees" },
 ];

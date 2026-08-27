@@ -41,7 +41,7 @@ employeesRouter.post("/", async (req, res, next) => {
 employeesRouter.patch("/:id", async (req, res, next) => {
   try {
     const body = updateEmployeeSchema.parse(req.body);
-    res.json(await employeesService.updateEmployee(req.params.id, body));
+    res.json(await employeesService.updateEmployee(req.params.id, body, req.user!.userId));
   } catch (err) {
     next(err);
   }
@@ -49,7 +49,7 @@ employeesRouter.patch("/:id", async (req, res, next) => {
 
 employeesRouter.delete("/:id", async (req, res, next) => {
   try {
-    res.json(await employeesService.deactivateEmployee(req.params.id));
+    res.json(await employeesService.deactivateEmployee(req.params.id, req.user!.userId));
   } catch (err) {
     next(err);
   }

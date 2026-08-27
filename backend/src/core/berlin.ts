@@ -200,3 +200,21 @@ export function monthDateRange(year: number, month: number): { gte: Date; lt: Da
   const lt = ymdToDateColumn(formatYmd(nextYear, nextMonth, 1));
   return { gte, lt };
 }
+
+/** Last civil day of the calendar month (YMD arithmetic, Europe/Berlin calendar). */
+export function lastYmdOfMonth(year: number, month: number): string {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
+    throw new Error(`Invalid year-month ${year}-${month}`);
+  }
+  return ymdFromDateColumn(new Date(Date.UTC(year, month, 0)));
+}
+
+/** Closed when the month's last Berlin day ≤ today (Berlin YMD). */
+export function isCalendarMonthClosed(year: number, month: number, todayYmd: string): boolean {
+  return lastYmdOfMonth(year, month) <= todayYmd;
+}
+
+export function isYmdInClosedMonth(ymd: string, todayYmd: string): boolean {
+  const { year, month } = parseYmd(ymd);
+  return isCalendarMonthClosed(year, month, todayYmd);
+}

@@ -6,23 +6,18 @@ import {
   type ReactNode,
 } from "react";
 import { apiFetch, ApiError, refreshSession } from "../api/client";
-import {
-  clearSession,
-  getRefreshToken,
-  setAccessToken,
-  setRefreshToken,
-} from "./session";
+import { clearSession, getCsrfToken, setAccessToken } from "./session";
 import type { AuthResponse, PublicUser } from "../types/api";
 import { AuthContext } from "./auth-context";
 
-/** Один restore на загрузку страницы (StrictMode remount ждёт тот же Promise) */
+/** One restore on page load (StrictMode remount waits on the same Promise) */
 let restoreInFlight: Promise<PublicUser | null> | null = null;
 
 function restoreSession(): Promise<PublicUser | null> {
   if (restoreInFlight) return restoreInFlight;
 
   restoreInFlight = (async () => {
-    if (!getRefreshToken()) return null;
+    if (!getCsrfToken()) return null;
     const data = await refreshSession();
     return data?.user ?? null;
   })();
@@ -39,7 +34,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     void (async () => {
       try {
-        if (!getRefreshToken()) {
+        if (!getCsrfToken()) {
           if (!cancelled) setReady(true);
           return;
         }
@@ -66,24 +61,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [ready]);
 
   const login = useCallback(async (loginName: string, password: string) => {
-    const data = await apiFetch<AuthResponse>("/api/auth/login", {
+    const data = await apiFetch<AuthResponse>("/api/v1/auth/login", {
       method: "POST",
       body: { login: loginName, password },
       skipAuth: true,
+      credentials: "include",
     });
     setAccessToken(data.accessToken);
-    setRefreshToken(data.refreshToken);
     setUser(data.user);
   }, []);
 
   const logout = useCallback(async () => {
-    const refreshToken = getRefreshToken();
     try {
-      if (refreshToken) {
-        await apiFetch("/api/auth/logout", {
+      if (getCsrfToken()) {
+        await apiFetch("/api/v1/auth/logout", {
           method: "POST",
-          body: { refreshToken },
           skipAuth: true,
+          credentials: "include",
+          csrf: true,
         });
       }
     } catch (err) {
@@ -95,9 +90,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
+    const data = await apiFetch<{ user: PublicUser }>("/api/v1/auth/password", {
+      method: "PATCH",
+      body: { currentPassword, newPassword },
+      credentials: "include",
+    });
+    setUser(data.user);
+  }, []);
+
   const value = useMemo(
-    () => ({ user, ready, login, logout }),
-    [user, ready, login, logout],
+    () => ({ user, ready, login, logout, changePassword }),
+    [user, ready, login, logout, changePassword],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

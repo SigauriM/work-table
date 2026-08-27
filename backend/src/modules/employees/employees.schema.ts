@@ -1,5 +1,13 @@
 import { z } from "zod";
 import { calendarYmdSchema } from "../../core/calendarYmd.js";
+import {
+  hoursPerDaySchema,
+  LOGIN_MAX,
+  moneyStringSchema,
+  NAME_MAX,
+  PASSWORD_MAX,
+  PASSWORD_SET_MIN,
+} from "../../core/stringFields.js";
 
 const payTypeSchema = z.enum(["HOURLY", "SALARY"]);
 
@@ -12,14 +20,14 @@ export const listEmployeesQuerySchema = z.object({
 
 export const createEmployeeSchema = z
   .object({
-    login: z.string().min(1),
-    password: z.string().min(1),
-    firstName: z.string().min(1),
-    lastName: z.string().min(1),
+    login: z.string().min(1).max(LOGIN_MAX),
+    password: z.string().min(PASSWORD_SET_MIN).max(PASSWORD_MAX),
+    firstName: z.string().min(1).max(NAME_MAX),
+    lastName: z.string().min(1).max(NAME_MAX),
     payType: payTypeSchema,
-    hourlyRate: z.string().optional(),
-    monthlySalary: z.string().optional(),
-    hoursPerDay: z.string().min(1),
+    hourlyRate: moneyStringSchema.optional(),
+    monthlySalary: moneyStringSchema.optional(),
+    hoursPerDay: hoursPerDaySchema,
     daysPerWeek: z.number().int().min(1).max(7),
     hiredAt: calendarYmdSchema,
   })
@@ -34,14 +42,14 @@ export const createEmployeeSchema = z
 
 export const updateEmployeeSchema = z
   .object({
-    login: z.string().min(1).optional(),
-    password: z.string().min(1).optional(),
-    firstName: z.string().min(1).optional(),
-    lastName: z.string().min(1).optional(),
+    login: z.string().min(1).max(LOGIN_MAX).optional(),
+    password: z.string().min(PASSWORD_SET_MIN).max(PASSWORD_MAX).optional(),
+    firstName: z.string().min(1).max(NAME_MAX).optional(),
+    lastName: z.string().min(1).max(NAME_MAX).optional(),
     payType: payTypeSchema.optional(),
-    hourlyRate: z.string().nullable().optional(),
-    monthlySalary: z.string().nullable().optional(),
-    hoursPerDay: z.string().min(1).optional(),
+    hourlyRate: moneyStringSchema.nullable().optional(),
+    monthlySalary: moneyStringSchema.nullable().optional(),
+    hoursPerDay: hoursPerDaySchema.optional(),
     daysPerWeek: z.number().int().min(1).max(7).optional(),
     hiredAt: calendarYmdSchema.optional(),
     isActive: z.boolean().optional(),

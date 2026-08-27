@@ -32,7 +32,7 @@ shiftsRouter.post("/", async (req, res, next) => {
       throw new HttpError(400, "employeeId is required");
     }
     const body = createShiftSchema.parse(req.body);
-    res.status(201).json(await shiftsService.createShift(body));
+    res.status(201).json(await shiftsService.createShift(body, req.user!.userId));
   } catch (err) {
     next(err);
   }

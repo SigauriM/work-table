@@ -11,6 +11,7 @@ export type TermsValues = {
 };
 
 export type TermsSlice = TermsValues & {
+  id?: string;
   validFrom: string;
   validTo: string | null;
 };
