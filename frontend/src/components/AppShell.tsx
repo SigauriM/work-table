@@ -1,19 +1,8 @@
 import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
-import { useAuth } from "../auth/AuthContext";
+import { useAuth } from "../auth/useAuth";
 import { BUILD_LABEL } from "../buildLabel";
-
-export type NavItem = { to: string; label: string; end?: boolean };
-
-export const employeeNav: NavItem[] = [
-  { to: "/employee", label: "Timesheet", end: true },
-  { to: "/employee/stats", label: "Stats" },
-];
-
-export const adminNav: NavItem[] = [
-  { to: "/admin", label: "Overview", end: true },
-  { to: "/admin/employees", label: "Employees" },
-];
+import type { NavItem } from "./nav";
 
 function linkClass(active: boolean) {
   return [

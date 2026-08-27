@@ -1,41 +1,49 @@
-/** dateYmd: "2024-03-01", timeHm: "09:00" или "09:00:00" → ISO UTC с Z */
-export function utcDateTimeToIso(dateYmd: string, timeHm: string): string {
-    const t = timeHm.length === 5 ? `${timeHm}:00` : timeHm;
-    return `${dateYmd}T${t}.000Z`;
+import {
+  berlinPartsFromInstant,
+  instantFromBerlin,
+  nextBerlinYmd,
+} from "./berlin";
+
+/** Form clock in Europe/Berlin → ISO instant (not typed digits + Z). */
+export function berlinDateTimeToIso(dateYmd: string, timeHm: string): string {
+  return instantFromBerlin(dateYmd, timeHm).toISOString();
+}
+
+/** ISO instant → date/time fields for inputs, in Europe/Berlin. */
+export function isoToBerlinDateTimeParts(iso: string): { date: string; time: string } {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) {
+    throw new Error("Invalid ISO");
   }
-  
-  /** Календарный день → полночь UTC (shift.date, sick day) */
-  export function utcDateToIso(dateYmd: string): string {
-    return `${dateYmd}T00:00:00.000Z`;
+  const parts = berlinPartsFromInstant(d);
+  return { date: parts.ymd, time: parts.hm };
+}
+
+/** `@db.Date` / hire calendar JSON: UTC midnight of the civil YMD. */
+export function calendarYmdFromIso(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) {
+    throw new Error("Invalid ISO");
   }
-  
-  /** ISO → части для input type="date" / type="time" (как UTC, не локаль браузера) */
-  export function isoToUtcDateTimeParts(iso: string): { date: string; time: string } {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) {
-      throw new Error("Invalid ISO");
-    }
-    const date = d.toISOString().slice(0, 10);
-    const time = d.toISOString().slice(11, 16);
-    return { date, time };
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * Overnight: if end clock is not after start on the same Berlin day,
+ * end is the next calendar day at that clock time.
+ */
+export function berlinShiftEndIso(
+  startDateYmd: string,
+  startTimeHm: string,
+  endTimeHm: string,
+): string {
+  const start = instantFromBerlin(startDateYmd, startTimeHm);
+  let end = instantFromBerlin(startDateYmd, endTimeHm);
+  if (end.getTime() <= start.getTime()) {
+    end = instantFromBerlin(nextBerlinYmd(startDateYmd), endTimeHm);
   }
-  
-  /**
-   * Для overnight: если endTimeHm <= startTimeHm по часам,
-   * конец на следующий UTC-день относительно dateYmd начала.
-   */
-  export function utcShiftEndIso(
-    startDateYmd: string,
-    startTimeHm: string,
-    endTimeHm: string,
-  ): string {
-    const startIso = utcDateTimeToIso(startDateYmd, startTimeHm);
-    let endIso = utcDateTimeToIso(startDateYmd, endTimeHm);
-    if (new Date(endIso) <= new Date(startIso)) {
-      const next = new Date(`${startDateYmd}T00:00:00.000Z`);
-      next.setUTCDate(next.getUTCDate() + 1);
-      const nextYmd = next.toISOString().slice(0, 10);
-      endIso = utcDateTimeToIso(nextYmd, endTimeHm);
-    }
-    return endIso;
-  }
+  return end.toISOString();
+}

@@ -10,12 +10,13 @@ import {
   deleteOvertimePayout,
   listOvertimePayouts,
 } from "../../api/payouts";
-import { AppShell, adminNav } from "../../components/AppShell";
+import { AppShell } from "../../components/AppShell";
+import { adminNav } from "../../components/nav";
 import { MonthPicker, TabBar } from "../../components/MonthPicker";
 import { ShiftList } from "../../components/ShiftList";
 import { StatsBlock } from "../../components/StatsBlock";
 import { useYearMonth } from "../../hooks/useYearMonth";
-import { isoToUtcDateTimeParts, utcDateToIso } from "../../lib/datetime";
+import { calendarYmdFromIso } from "../../lib/datetime";
 import type {
   Employee,
   EmployeeStats,
@@ -57,16 +58,15 @@ export default function EmployeeDetail() {
   const [otNote, setOtNote] = useState("");
   const [otPending, setOtPending] = useState(false);
 
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (isCancelled?: () => boolean) => {
     if (!id) return;
-    setLoading(true);
-    setError(null);
     try {
       const emp = await getEmployee(id);
+      if (isCancelled?.()) return;
       setEmployee(emp);
       setLogin(emp.login);
       setPassword("");
@@ -77,7 +77,7 @@ export default function EmployeeDetail() {
       setMonthlySalary(emp.monthlySalary ?? "");
       setHoursPerDay(emp.hoursPerDay);
       setDaysPerWeek(String(emp.daysPerWeek));
-      setHiredAt(isoToUtcDateTimeParts(emp.hiredAt).date);
+      setHiredAt(calendarYmdFromIso(emp.hiredAt));
       setIsActive(emp.isActive);
 
       const [st, sh, sk, ot] = await Promise.all([
@@ -86,11 +86,14 @@ export default function EmployeeDetail() {
         listSickDays({ employeeId: id, year, month }),
         listOvertimePayouts(id),
       ]);
+      if (isCancelled?.()) return;
       setStats(st);
       setShifts(sh);
       setSickDays(sk);
       setOvertimePayouts(ot);
+      setError(null);
     } catch (err) {
+      if (isCancelled?.()) return;
       setEmployee(null);
       setStats(null);
       setShifts([]);
@@ -98,12 +101,20 @@ export default function EmployeeDetail() {
       setOvertimePayouts([]);
       setError(err instanceof ApiError ? err.message : "Failed to load");
     } finally {
-      setLoading(false);
+      if (!isCancelled?.()) setLoading(false);
     }
   }, [id, year, month]);
 
   useEffect(() => {
-    void load();
+    let cancelled = false;
+    void (async () => {
+      await Promise.resolve();
+      if (cancelled) return;
+      await load(() => cancelled);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [load]);
 
   async function onSave(e: FormEvent) {
@@ -121,7 +132,7 @@ export default function EmployeeDetail() {
         monthlySalary: payType === "SALARY" ? monthlySalary.trim() : null,
         hoursPerDay: hoursPerDay.trim(),
         daysPerWeek: Number(daysPerWeek),
-        hiredAt: utcDateToIso(hiredAt),
+        hiredAt,
         isActive,
       };
       await updateEmployee(id, {
@@ -164,7 +175,7 @@ export default function EmployeeDetail() {
     setError(null);
     try {
       await createOvertimePayout(id, {
-        date: utcDateToIso(otDate),
+        date: otDate,
         hoursPaid: otHours.trim(),
         amount: otAmount.trim(),
         note: otNote.trim() || undefined,
@@ -336,7 +347,7 @@ export default function EmployeeDetail() {
             </label>
           </div>
           <label className="flex flex-col gap-1 text-sm">
-            Hired at (UTC date)
+            Hired at
             <input
               type="date"
               className={inputClass}
@@ -393,7 +404,7 @@ export default function EmployeeDetail() {
                   className="flex items-center justify-between rounded border border-neutral-200 bg-white p-3 text-sm"
                 >
                   <span>
-                    {isoToUtcDateTimeParts(d.date).date}
+                    {calendarYmdFromIso(d.date)}
                     {d.note ? ` — ${d.note}` : ""}
                   </span>
                   <button
@@ -421,7 +432,7 @@ export default function EmployeeDetail() {
                 <tbody>
                   {sickDays.map((d) => (
                     <tr key={d.id} className="border-b border-neutral-100">
-                      <td className="px-3 py-3">{isoToUtcDateTimeParts(d.date).date}</td>
+                      <td className="px-3 py-3">{calendarYmdFromIso(d.date)}</td>
                       <td className="px-3 py-3">{d.note ?? ""}</td>
                       <td className="px-3 py-3">
                         <button
@@ -472,7 +483,7 @@ export default function EmployeeDetail() {
                   className="flex items-start justify-between gap-2 rounded border border-neutral-200 bg-white p-3 text-sm"
                 >
                   <div>
-                    {isoToUtcDateTimeParts(p.date).date} · {p.hoursPaid} h · {p.amount}
+                    {calendarYmdFromIso(p.date)} · {p.hoursPaid} h · {p.amount}
                     {p.note ? ` — ${p.note}` : ""}
                   </div>
                   <button
@@ -494,7 +505,7 @@ export default function EmployeeDetail() {
             >
               <h3 className="text-sm font-medium">Add overtime payout</h3>
               <label className="flex flex-col gap-1 text-sm">
-                Date (UTC)
+                Date
                 <input
                   type="date"
                   className={inputClass}

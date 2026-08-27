@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { ApiError } from "../../api/client";
 import { meStats } from "../../api/stats";
-import { useAuth } from "../../auth/AuthContext";
-import { AppShell, employeeNav } from "../../components/AppShell";
+import { useAuth } from "../../auth/useAuth";
+import { AppShell } from "../../components/AppShell";
+import { employeeNav } from "../../components/nav";
 import { MonthPicker } from "../../components/MonthPicker";
 import { StatsBlock } from "../../components/StatsBlock";
 import { useYearMonth } from "../../hooks/useYearMonth";
@@ -13,25 +14,35 @@ export default function EmployeeStatsPage() {
   const employeeId = user?.employeeId ?? null;
   const { year, month, setYearMonth } = useYearMonth();
   const [stats, setStats] = useState<EmployeeStats | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (isCancelled?: () => boolean) => {
     if (!employeeId) return;
-    setLoading(true);
-    setError(null);
     try {
-      setStats(await meStats(year, month));
+      const data = await meStats(year, month);
+      if (isCancelled?.()) return;
+      setStats(data);
+      setError(null);
     } catch (err) {
+      if (isCancelled?.()) return;
       setStats(null);
       setError(err instanceof ApiError ? err.message : "Failed to load");
     } finally {
-      setLoading(false);
+      if (!isCancelled?.()) setLoading(false);
     }
   }, [employeeId, year, month]);
 
   useEffect(() => {
-    void load();
+    let cancelled = false;
+    void (async () => {
+      await Promise.resolve();
+      if (cancelled) return;
+      await load(() => cancelled);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [load]);
 
   return (

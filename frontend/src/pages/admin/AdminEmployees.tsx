@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { ApiError } from "../../api/client";
 import {
@@ -6,8 +6,8 @@ import {
   deactivateEmployee,
   listEmployees,
 } from "../../api/employees";
-import { AppShell, adminNav } from "../../components/AppShell";
-import { utcDateToIso } from "../../lib/datetime";
+import { AppShell } from "../../components/AppShell";
+import { adminNav } from "../../components/nav";
 import type { CreateEmployeeBody, Employee, PayType } from "../../types/api";
 import { btnPrimary, btnSecondary, inputClass } from "../../ui";
 
@@ -39,39 +39,61 @@ const emptyCreate: CreateForm = {
 
 export default function AdminEmployees() {
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<CreateForm>(emptyCreate);
   const [createPending, setCreatePending] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-  const createDialogRef = useRef<HTMLDialogElement>(null);
+  const [createOpen, setCreateOpen] = useState(false);
 
   function openCreate() {
     setForm(emptyCreate);
     setCreateError(null);
-    createDialogRef.current?.showModal();
+    setCreateOpen(true);
   }
 
-  function closeCreate() {
-    createDialogRef.current?.close();
-  }
+  const closeCreate = useCallback(() => {
+    if (createPending) return;
+    setCreateOpen(false);
+    setForm(emptyCreate);
+    setCreateError(null);
+  }, [createPending, setCreateOpen, setForm, setCreateError]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const load = useCallback(async (isCancelled?: () => boolean) => {
     try {
-      setEmployees(await listEmployees());
+      const data = await listEmployees();
+      if (isCancelled?.()) return;
+      setEmployees(data);
+      setError(null);
     } catch (err) {
+      if (isCancelled?.()) return;
       setEmployees([]);
       setError(err instanceof ApiError ? err.message : "Failed to load");
     } finally {
-      setLoading(false);
+      if (!isCancelled?.()) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void load();
+    let cancelled = false;
+    void (async () => {
+      await Promise.resolve();
+      if (cancelled) return;
+      await load(() => cancelled);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [load]);
+
+  useEffect(() => {
+    if (!createOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") closeCreate();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [createOpen, closeCreate]);
 
   async function onCreate(e: FormEvent) {
     e.preventDefault();
@@ -86,7 +108,7 @@ export default function AdminEmployees() {
         payType: form.payType,
         hoursPerDay: form.hoursPerDay.trim(),
         daysPerWeek: Number(form.daysPerWeek),
-        hiredAt: utcDateToIso(form.hiredAt),
+        hiredAt: form.hiredAt,
       };
       if (form.payType === "HOURLY") {
         body.hourlyRate = form.hourlyRate.trim();
@@ -95,7 +117,8 @@ export default function AdminEmployees() {
       }
       await createEmployee(body);
       setForm(emptyCreate);
-      closeCreate();
+      setCreateError(null);
+      setCreateOpen(false);
       await load();
     } catch (err) {
       setCreateError(err instanceof ApiError ? err.message : "Create failed");
@@ -194,23 +217,26 @@ export default function AdminEmployees() {
         </table>
       </div>
 
-      <dialog
-        ref={createDialogRef}
-        className="fixed inset-0 z-50 m-auto h-fit max-h-[min(90dvh,40rem)] w-[min(calc(100%-2rem),28rem)] flex-col overflow-hidden rounded border border-neutral-200 bg-white p-0 text-[var(--ts-ink)] shadow-lg backdrop:bg-black/40 open:flex"
-        onClose={() => {
-          setForm(emptyCreate);
-          setCreateError(null);
-        }}
-        onCancel={(e) => {
-          if (createPending) e.preventDefault();
-        }}
-      >
+      {createOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center"
+          onClick={() => closeCreate()}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="create-employee-title"
+            className="flex max-h-[min(90dvh,40rem)] w-full max-w-md flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white text-[var(--ts-ink)] shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
       <form
         onSubmit={onCreate}
-        className="flex min-h-0 max-h-full flex-col"
+        className="flex min-h-0 flex-1 flex-col"
       >
-        <div className="flex flex-col gap-3 overflow-y-auto p-3">
-        <h2 className="text-lg font-medium">Create employee</h2>
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
+        <h2 id="create-employee-title" className="text-lg font-medium">
+          Create employee
+        </h2>
         {createError ? (
           <p className="text-sm text-red-700" role="alert">
             {createError}
@@ -323,7 +349,7 @@ export default function AdminEmployees() {
           </label>
         </div>
         <label className="flex flex-col gap-1 text-sm">
-          Hired at (UTC date)
+          Hired at
           <input
             type="date"
             className={inputClass}
@@ -334,7 +360,7 @@ export default function AdminEmployees() {
           />
         </label>
         </div>
-        <div className="flex gap-2 border-t border-neutral-200 p-3">
+        <div className="flex shrink-0 gap-2 border-t border-neutral-200 p-3">
           <button
             type="button"
             className={btnSecondary}
@@ -348,7 +374,9 @@ export default function AdminEmployees() {
           </button>
         </div>
       </form>
-      </dialog>
+          </div>
+        </div>
+      ) : null}
     </AppShell>
   );
 }

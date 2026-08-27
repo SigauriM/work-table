@@ -1,11 +1,12 @@
-import { utcDateTimeToIso, utcShiftEndIso } from "./datetime";
+import { berlinYmd } from "./berlin";
+import { berlinDateTimeToIso, berlinShiftEndIso } from "./datetime";
 
 export function pad2(n: number) {
   return String(n).padStart(2, "0");
 }
 
 export function utcTodayYmd() {
-  return new Date().toISOString().slice(0, 10);
+  return berlinYmd();
 }
 
 export function ymd(year: number, month: number, day: number) {
@@ -43,7 +44,7 @@ export function formatMonthShort(year: number, month: number) {
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     year: "numeric",
-    timeZone: "UTC",
+    timeZone: "Europe/Berlin",
   }).format(d);
 }
 
@@ -52,7 +53,7 @@ export function formatMonthLong(year: number, month: number) {
   return new Intl.DateTimeFormat("en-US", {
     month: "long",
     year: "numeric",
-    timeZone: "UTC",
+    timeZone: "Europe/Berlin",
   }).format(d);
 }
 
@@ -62,7 +63,7 @@ export function formatDayTitle(dateYmd: string) {
     weekday: "short",
     month: "long",
     day: "numeric",
-    timeZone: "UTC",
+    timeZone: "Europe/Berlin",
   }).format(d);
 }
 
@@ -71,7 +72,7 @@ export function formatDayShort(dateYmd: string) {
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
-    timeZone: "UTC",
+    timeZone: "Europe/Berlin",
   }).format(d);
 }
 
@@ -80,7 +81,7 @@ export function weekdayNormHours(dateYmd: string, hoursPerDay: number) {
   return isUtcWeekend(dateYmd) ? 0 : hoursPerDay;
 }
 
-/** Live shift length in hours from UTC clock fields, including overnight. */
+/** Live shift length in hours from Berlin clock fields, including overnight. */
 export function countedShiftHours(
   dateYmd: string,
   start: string,
@@ -89,21 +90,25 @@ export function countedShiftHours(
   breakEnd: string,
 ) {
   if (!dateYmd || !start || !end) return 0;
-  const startIso = utcDateTimeToIso(dateYmd, start);
-  const endIso = utcShiftEndIso(dateYmd, start, end);
-  let minutes =
-    (new Date(endIso).getTime() - new Date(startIso).getTime()) / 60000;
-  const hasB0 = breakStart.trim() !== "";
-  const hasB1 = breakEnd.trim() !== "";
-  if (hasB0 && hasB1) {
-    const b0 = utcDateTimeToIso(dateYmd, breakStart);
-    let b1 = utcDateTimeToIso(dateYmd, breakEnd);
-    if (new Date(b1) <= new Date(b0)) {
-      b1 = utcShiftEndIso(dateYmd, breakStart, breakEnd);
+  try {
+    const startIso = berlinDateTimeToIso(dateYmd, start);
+    const endIso = berlinShiftEndIso(dateYmd, start, end);
+    let minutes =
+      (new Date(endIso).getTime() - new Date(startIso).getTime()) / 60000;
+    const hasB0 = breakStart.trim() !== "";
+    const hasB1 = breakEnd.trim() !== "";
+    if (hasB0 && hasB1) {
+      const b0 = berlinDateTimeToIso(dateYmd, breakStart);
+      let b1 = berlinDateTimeToIso(dateYmd, breakEnd);
+      if (new Date(b1) <= new Date(b0)) {
+        b1 = berlinShiftEndIso(dateYmd, breakStart, breakEnd);
+      }
+      minutes -= (new Date(b1).getTime() - new Date(b0).getTime()) / 60000;
     }
-    minutes -= (new Date(b1).getTime() - new Date(b0).getTime()) / 60000;
+    return Math.max(0, minutes) / 60;
+  } catch {
+    return 0;
   }
-  return Math.max(0, minutes) / 60;
 }
 
 export function dayDelta(hours: number, norm: number) {

@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiError } from "../../api/client";
 import { statsOverview } from "../../api/stats";
-import { AppShell, adminNav } from "../../components/AppShell";
+import { AppShell } from "../../components/AppShell";
+import { adminNav } from "../../components/nav";
 import { MonthPicker } from "../../components/MonthPicker";
 import { useYearMonth } from "../../hooks/useYearMonth";
 import type { OverviewRow } from "../../types/api";
@@ -10,24 +11,34 @@ import type { OverviewRow } from "../../types/api";
 export default function AdminHome() {
   const { year, month, setYearMonth } = useYearMonth();
   const [overview, setOverview] = useState<OverviewRow[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const load = useCallback(async (isCancelled?: () => boolean) => {
     try {
-      setOverview(await statsOverview(year, month));
+      const data = await statsOverview(year, month);
+      if (isCancelled?.()) return;
+      setOverview(data);
+      setError(null);
     } catch (err) {
+      if (isCancelled?.()) return;
       setOverview([]);
       setError(err instanceof ApiError ? err.message : "Failed to load");
     } finally {
-      setLoading(false);
+      if (!isCancelled?.()) setLoading(false);
     }
   }, [year, month]);
 
   useEffect(() => {
-    void load();
+    let cancelled = false;
+    void (async () => {
+      await Promise.resolve();
+      if (cancelled) return;
+      await load(() => cancelled);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [load]);
 
   const empty = overview.length === 0 && !loading;

@@ -3,14 +3,15 @@ import { ApiError } from "../../api/client";
 import { createShift, deleteShift, listShifts, updateShift } from "../../api/shifts";
 import { createSickDay, deleteSickDay, listSickDays } from "../../api/sickDays";
 import { meStats } from "../../api/stats";
-import { useAuth } from "../../auth/AuthContext";
-import { AppShell, employeeNav } from "../../components/AppShell";
+import { useAuth } from "../../auth/useAuth";
+import { AppShell } from "../../components/AppShell";
+import { employeeNav } from "../../components/nav";
 import { useYearMonth } from "../../hooks/useYearMonth";
 import {
-  isoToUtcDateTimeParts,
-  utcDateToIso,
-  utcDateTimeToIso,
-  utcShiftEndIso,
+  berlinDateTimeToIso,
+  berlinShiftEndIso,
+  calendarYmdFromIso,
+  isoToBerlinDateTimeParts,
 } from "../../lib/datetime";
 import {
   WEEKDAYS,
@@ -68,11 +69,12 @@ export default function EmployeeHome() {
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [sickDays, setSickDays] = useState<SickDay[]>([]);
   const [stats, setStats] = useState<EmployeeStats | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mobileDayOpen, setMobileDayOpen] = useState(false);
 
   const firstYmd = ymd(year, month, 1);
+  const monthPrefix = `${year}-${String(month).padStart(2, "0")}`;
   const [selectedYmd, setSelectedYmd] = useState(today.startsWith(firstYmd.slice(0, 7)) ? today : firstYmd);
 
   const [formKind, setFormKind] = useState<FormKind>("shift");
@@ -80,42 +82,48 @@ export default function EmployeeHome() {
   const [editing, setEditing] = useState<{ kind: EntryKind; id: string } | null>(null);
   const [pending, setPending] = useState(false);
 
-  useEffect(() => {
-    const fallback = today.startsWith(`${year}-${String(month).padStart(2, "0")}`)
-      ? today
-      : ymd(year, month, 1);
-    setSelectedYmd(fallback);
+  if (!selectedYmd.startsWith(monthPrefix)) {
+    setSelectedYmd(today.startsWith(monthPrefix) ? today : firstYmd);
     setMobileDayOpen(false);
     setEditing(null);
     setForm(emptyTimes);
     setFormKind("shift");
-  }, [year, month, today]);
+  }
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (isCancelled?: () => boolean) => {
     if (!employeeId) return;
-    setLoading(true);
-    setError(null);
     try {
       const [s, d, st] = await Promise.all([
         listShifts({ employeeId, year, month }),
         listSickDays({ employeeId, year, month }),
         meStats(year, month),
       ]);
+      if (isCancelled?.()) return;
       setShifts(s);
       setSickDays(d);
       setStats(st);
+      setError(null);
     } catch (err) {
+      if (isCancelled?.()) return;
       setShifts([]);
       setSickDays([]);
       setStats(null);
       setError(err instanceof ApiError ? err.message : "Failed to load");
     } finally {
-      setLoading(false);
+      if (!isCancelled?.()) setLoading(false);
     }
-  }, [employeeId, year, month]);
+  }, [employeeId, year, month, setLoading, setError, setShifts, setSickDays, setStats]);
 
   useEffect(() => {
-    void load();
+    let cancelled = false;
+    void (async () => {
+      await Promise.resolve();
+      if (cancelled) return;
+      await load(() => cancelled);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [load]);
 
   const dayNormHours = (() => {
@@ -131,11 +139,11 @@ export default function EmployeeHome() {
       map.set(key, list);
     };
     for (const s of shifts) {
-      const date = isoToUtcDateTimeParts(s.date).date;
+      const date = calendarYmdFromIso(s.date);
       add(date, { kind: "shift", shift: s, hours: s.workedMinutes / 60 });
     }
     for (const d of sickDays) {
-      const date = isoToUtcDateTimeParts(d.date).date;
+      const date = calendarYmdFromIso(d.date);
       add(date, { kind: "sick", sick: d, hours: sickHours(d, dayNormHours) });
     }
     return map;
@@ -186,10 +194,10 @@ export default function EmployeeHome() {
       setFormKind("shift");
       setEditing({ kind: "shift", id: s.id });
       setForm({
-        startTime: isoToUtcDateTimeParts(s.startTime).time,
-        endTime: isoToUtcDateTimeParts(s.endTime).time,
-        breakStart: s.breakStart ? isoToUtcDateTimeParts(s.breakStart).time : "",
-        breakEnd: s.breakEnd ? isoToUtcDateTimeParts(s.breakEnd).time : "",
+        startTime: isoToBerlinDateTimeParts(s.startTime).time,
+        endTime: isoToBerlinDateTimeParts(s.endTime).time,
+        breakStart: s.breakStart ? isoToBerlinDateTimeParts(s.breakStart).time : "",
+        breakEnd: s.breakEnd ? isoToBerlinDateTimeParts(s.breakEnd).time : "",
         note: s.note ?? "",
       });
       return;
@@ -231,11 +239,11 @@ export default function EmployeeHome() {
         }
         const body = {
           employeeId,
-          date: utcDateToIso(selectedYmd),
-          startTime: utcDateTimeToIso(selectedYmd, form.startTime),
-          endTime: utcShiftEndIso(selectedYmd, form.startTime, form.endTime),
-          breakStart: hasB0 ? utcDateTimeToIso(selectedYmd, form.breakStart) : null,
-          breakEnd: hasB1 ? utcDateTimeToIso(selectedYmd, form.breakEnd) : null,
+          date: selectedYmd,
+          startTime: berlinDateTimeToIso(selectedYmd, form.startTime),
+          endTime: berlinShiftEndIso(selectedYmd, form.startTime, form.endTime),
+          breakStart: hasB0 ? berlinDateTimeToIso(selectedYmd, form.breakStart) : null,
+          breakEnd: hasB1 ? berlinDateTimeToIso(selectedYmd, form.breakEnd) : null,
           note: form.note.trim() || undefined,
         };
         if (editing?.kind === "shift") {
@@ -249,13 +257,13 @@ export default function EmployeeHome() {
         await deleteSickDay(editing.id);
         await createSickDay({
           employeeId,
-          date: utcDateToIso(selectedYmd),
+          date: selectedYmd,
           note: form.note.trim() || undefined,
         });
       } else {
         await createSickDay({
           employeeId,
-          date: utcDateToIso(selectedYmd),
+          date: selectedYmd,
           note: form.note.trim() || undefined,
         });
       }
@@ -264,7 +272,13 @@ export default function EmployeeHome() {
       setFormKind("shift");
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Save failed");
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "Save failed",
+      );
     } finally {
       setPending(false);
     }
@@ -652,13 +666,8 @@ function DayPanel({
           >
             ‹ Back
           </button>
-          <span className="text-[11.5px] text-[var(--ts-faint)]">UTC</span>
         </div>
-      ) : (
-        <div className="flex justify-end">
-          <span className="text-[11.5px] text-[var(--ts-faint)]">UTC</span>
-        </div>
-      )}
+      ) : null}
 
       <div className="flex items-end justify-between gap-3">
         <div>
@@ -804,13 +813,13 @@ function EntryRow({
   onDelete: () => void;
 }) {
   const isShift = entry.kind === "shift";
-  const start = isShift ? isoToUtcDateTimeParts(entry.shift.startTime).time : null;
-  const end = isShift ? isoToUtcDateTimeParts(entry.shift.endTime).time : null;
+  const start = isShift ? isoToBerlinDateTimeParts(entry.shift.startTime).time : null;
+  const end = isShift ? isoToBerlinDateTimeParts(entry.shift.endTime).time : null;
   const b0 = isShift && entry.shift.breakStart
-    ? isoToUtcDateTimeParts(entry.shift.breakStart).time
+    ? isoToBerlinDateTimeParts(entry.shift.breakStart).time
     : null;
   const b1 = isShift && entry.shift.breakEnd
-    ? isoToUtcDateTimeParts(entry.shift.breakEnd).time
+    ? isoToBerlinDateTimeParts(entry.shift.breakEnd).time
     : null;
   const note = isShift ? entry.shift.note : entry.sick.note;
 

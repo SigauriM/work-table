@@ -3,7 +3,8 @@ import { Link, useParams } from "react-router-dom";
 import { ApiError } from "../../api/client";
 import { getEmployee } from "../../api/employees";
 import { deleteShift, listShifts } from "../../api/shifts";
-import { AppShell, adminNav } from "../../components/AppShell";
+import { AppShell } from "../../components/AppShell";
+import { adminNav } from "../../components/nav";
 import { ShiftList } from "../../components/ShiftList";
 import type { Employee, Shift } from "../../types/api";
 
@@ -11,31 +12,40 @@ export default function EmployeeShifts() {
   const { id } = useParams<{ id: string }>();
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [shifts, setShifts] = useState<Shift[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (isCancelled?: () => boolean) => {
     if (!id) return;
-    setLoading(true);
-    setError(null);
     try {
       const [emp, sh] = await Promise.all([
         getEmployee(id),
         listShifts({ employeeId: id }),
       ]);
+      if (isCancelled?.()) return;
       setEmployee(emp);
       setShifts(sh);
+      setError(null);
     } catch (err) {
+      if (isCancelled?.()) return;
       setEmployee(null);
       setShifts([]);
       setError(err instanceof ApiError ? err.message : "Failed to load");
     } finally {
-      setLoading(false);
+      if (!isCancelled?.()) setLoading(false);
     }
   }, [id]);
 
   useEffect(() => {
-    void load();
+    let cancelled = false;
+    void (async () => {
+      await Promise.resolve();
+      if (cancelled) return;
+      await load(() => cancelled);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [load]);
 
   async function onDeleteShift(shiftId: string) {

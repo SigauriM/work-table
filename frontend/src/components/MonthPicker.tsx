@@ -1,3 +1,4 @@
+import { berlinYearMonth } from "../lib/berlin";
 import { btnSecondary, inputClass } from "../ui";
 
 const MONTHS = [
@@ -16,7 +17,7 @@ const MONTHS = [
 ];
 
 function yearOptions(selected: number) {
-  const now = new Date().getUTCFullYear();
+  const now = berlinYearMonth().year;
   const years = new Set<number>();
   for (let y = now - 5; y <= now + 2; y++) years.add(y);
   years.add(selected);

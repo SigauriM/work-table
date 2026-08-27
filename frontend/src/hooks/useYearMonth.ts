@@ -1,9 +1,9 @@
 import { useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
+import { berlinYearMonth } from "../lib/berlin";
 
 export function defaultYearMonth() {
-  const now = new Date();
-  return { year: now.getUTCFullYear(), month: now.getUTCMonth() + 1 };
+  return berlinYearMonth();
 }
 
 export function useYearMonth() {

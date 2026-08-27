@@ -1,6 +1,4 @@
 import {
-  createContext,
-  useContext,
   useEffect,
   useMemo,
   useState,
@@ -15,15 +13,7 @@ import {
   setRefreshToken,
 } from "./session";
 import type { AuthResponse, PublicUser } from "../types/api";
-
-type AuthContextValue = {
-  user: PublicUser | null;
-  ready: boolean;
-  login: (login: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
-};
-
-const AuthContext = createContext<AuthContextValue | null>(null);
+import { AuthContext } from "./auth-context";
 
 /** Один restore на загрузку страницы (StrictMode remount ждёт тот же Promise) */
 let restoreInFlight: Promise<PublicUser | null> | null = null;
@@ -111,10 +101,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
-
-export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
-  return ctx;
 }

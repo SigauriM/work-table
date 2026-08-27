@@ -1,4 +1,4 @@
-import { isoToUtcDateTimeParts } from "../lib/datetime";
+import { calendarYmdFromIso, isoToBerlinDateTimeParts } from "../lib/datetime";
 import type { Shift } from "../types/api";
 import { btnSecondary } from "../ui";
 
@@ -19,9 +19,9 @@ export function ShiftList({
     <>
       <ul className="flex flex-col gap-2 md:hidden">
         {shifts.map((s) => {
-          const d = isoToUtcDateTimeParts(s.date).date;
-          const a = isoToUtcDateTimeParts(s.startTime).time;
-          const b = isoToUtcDateTimeParts(s.endTime).time;
+          const d = calendarYmdFromIso(s.date);
+          const a = isoToBerlinDateTimeParts(s.startTime).time;
+          const b = isoToBerlinDateTimeParts(s.endTime).time;
           return (
             <li
               key={s.id}
@@ -73,9 +73,9 @@ export function ShiftList({
           <tbody>
             {shifts.map((s) => (
               <tr key={s.id} className="border-b border-neutral-100">
-                <td className="px-3 py-3">{isoToUtcDateTimeParts(s.date).date}</td>
-                <td className="px-3 py-3">{isoToUtcDateTimeParts(s.startTime).time}</td>
-                <td className="px-3 py-3">{isoToUtcDateTimeParts(s.endTime).time}</td>
+                <td className="px-3 py-3">{calendarYmdFromIso(s.date)}</td>
+                <td className="px-3 py-3">{isoToBerlinDateTimeParts(s.startTime).time}</td>
+                <td className="px-3 py-3">{isoToBerlinDateTimeParts(s.endTime).time}</td>
                 <td className="px-3 py-3">{(s.workedMinutes / 60).toFixed(1)}</td>
                 <td className="px-3 py-3">{s.note ?? ""}</td>
                 <td className="px-3 py-3">
