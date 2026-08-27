@@ -24,6 +24,7 @@ import {
   formatHours,
   formatMonthLong,
   formatMonthShort,
+  hoursPerDayForYmd,
   isUtcWeekend,
   mondayPad,
   utcTodayYmd,
@@ -53,11 +54,6 @@ function markColor(kinds: EntryKind[]): string | null {
   if (kinds.includes("shift")) return "var(--ts-shift)";
   if (kinds.includes("sick")) return "var(--ts-sick)";
   return null;
-}
-
-function sickHours(day: SickDay, fallback: number) {
-  const n = Number(day.creditedHours);
-  return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
 export default function EmployeeHome() {
@@ -126,10 +122,11 @@ export default function EmployeeHome() {
     };
   }, [load]);
 
-  const dayNormHours = (() => {
-    const n = Number(stats?.hoursPerDay);
-    return Number.isFinite(n) && n > 0 ? n : 8;
-  })();
+  const dayNormHours = hoursPerDayForYmd(
+    selectedYmd,
+    stats?.terms,
+    stats?.hoursPerDay,
+  );
 
   const byDate = useMemo(() => {
     const map = new Map<string, DayEntry[]>();
@@ -144,10 +141,14 @@ export default function EmployeeHome() {
     }
     for (const d of sickDays) {
       const date = calendarYmdFromIso(d.date);
-      add(date, { kind: "sick", sick: d, hours: sickHours(d, dayNormHours) });
+      const hours = weekdayNormHours(
+        date,
+        hoursPerDayForYmd(date, stats?.terms, stats?.hoursPerDay),
+      );
+      add(date, { kind: "sick", sick: d, hours });
     }
     return map;
-  }, [shifts, sickDays, dayNormHours]);
+  }, [shifts, sickDays, stats?.terms, stats?.hoursPerDay]);
 
   const selectedEntries = byDate.get(selectedYmd) ?? [];
   const selectedHours = selectedEntries.reduce((sum, e) => sum + e.hours, 0);

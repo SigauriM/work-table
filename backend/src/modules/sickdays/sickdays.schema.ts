@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { calendarYmdSchema } from "../../core/calendarYmd.js";
 
 export const listSickDaysQuerySchema = z.object({
   employeeId: z.string().uuid(),
@@ -8,6 +9,6 @@ export const listSickDaysQuerySchema = z.object({
 
 export const createSickDaySchema = z.object({
   employeeId: z.string().uuid(),
-  date: z.coerce.date(),
+  date: calendarYmdSchema,
   note: z.string().optional(),
 });

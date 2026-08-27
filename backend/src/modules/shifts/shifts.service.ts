@@ -1,5 +1,11 @@
 import { Prisma, Role } from "@prisma/client";
 import { prisma } from "../../config/prisma.js";
+import {
+  assertShiftOnBerlinDate,
+  monthDateRange,
+  ymdFromDateColumn,
+  ymdToDateColumn,
+} from "../../core/berlin.js";
 import { calculateWorkedMinutes } from "../../core/calculations.js";
 import { HttpError } from "../../middleware/errorHandler.js";
 import type { z } from "zod";
@@ -19,15 +25,12 @@ type CreateInput = z.infer<typeof createShiftSchema>;
 type UpdateInput = z.infer<typeof updateShiftSchema>;
 type ListQuery = z.infer<typeof listShiftsQuerySchema>;
 
-function monthRangeUtc(year: number, month: number): { gte: Date; lt: Date } {
-  return {
-    gte: new Date(Date.UTC(year, month - 1, 1)),
-    lt: new Date(Date.UTC(year, month, 1)),
-  };
-}
-
-function dateOnlyUtc(d: Date): Date {
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+function requireShiftOnBerlinDate(dateYmd: string, startTime: Date, endTime: Date) {
+  try {
+    assertShiftOnBerlinDate(dateYmd, startTime, endTime);
+  } catch (err) {
+    throw new HttpError(400, err instanceof Error ? err.message : "Invalid date");
+  }
 }
 
 /** Смена через полночь ок; минуты относятся к date (день начала). */
@@ -72,9 +75,31 @@ function assertCanAccess(actor: Actor, rowEmployeeId: string) {
   }
 }
 
+/** Same employee, overlapping instants. Adjacent end==start is allowed. */
+async function assertNoOverlappingShift(
+  tx: Prisma.TransactionClient,
+  employeeId: string,
+  startTime: Date,
+  endTime: Date,
+  exceptId?: string,
+) {
+  const clash = await tx.shift.findFirst({
+    where: {
+      employeeId,
+      ...(exceptId ? { id: { not: exceptId } } : {}),
+      startTime: { lt: endTime },
+      endTime: { gt: startTime },
+    },
+    select: { id: true },
+  });
+  if (clash) {
+    throw new HttpError(409, "Overlapping shift");
+  }
+}
+
 export async function listShifts(query: ListQuery) {
   if (query.year !== undefined && query.month !== undefined) {
-    const range = monthRangeUtc(query.year, query.month);
+    const range = monthDateRange(query.year, query.month);
     return prisma.shift.findMany({
       where: {
         employeeId: query.employeeId,
@@ -90,8 +115,9 @@ export async function listShifts(query: ListQuery) {
 }
 
 export async function createShift(input: CreateInput) {
-  const date = dateOnlyUtc(input.date);
+  const date = ymdToDateColumn(input.date);
   assertShiftTimes(input);
+  requireShiftOnBerlinDate(input.date, input.startTime, input.endTime);
   const workedMinutes = calculateWorkedMinutes({
     startTime: input.startTime,
     endTime: input.endTime,
@@ -110,6 +136,8 @@ export async function createShift(input: CreateInput) {
     if (sick) {
       throw new HttpError(409, "Shift and sick day conflict");
     }
+
+    await assertNoOverlappingShift(tx, input.employeeId, input.startTime, input.endTime);
 
     return tx.shift.create({
       data: {
@@ -135,8 +163,9 @@ export async function updateShift(id: string, input: UpdateInput, actor: Actor) 
     assertCanAccess(actor, current.employeeId);
     await assertEmployeeWritable(tx, current.employeeId);
 
+    const dateYmd = input.date ?? ymdFromDateColumn(current.date);
     const next = {
-      date: input.date !== undefined ? dateOnlyUtc(input.date) : current.date,
+      date: ymdToDateColumn(dateYmd),
       startTime: input.startTime ?? current.startTime,
       endTime: input.endTime ?? current.endTime,
       breakStart:
@@ -146,6 +175,7 @@ export async function updateShift(id: string, input: UpdateInput, actor: Actor) 
     };
 
     assertShiftTimes(next);
+    requireShiftOnBerlinDate(dateYmd, next.startTime, next.endTime);
 
     const dateChanged = next.date.getTime() !== current.date.getTime();
     if (dateChanged) {
@@ -161,6 +191,14 @@ export async function updateShift(id: string, input: UpdateInput, actor: Actor) 
         throw new HttpError(409, "Shift and sick day conflict");
       }
     }
+
+    await assertNoOverlappingShift(
+      tx,
+      current.employeeId,
+      next.startTime,
+      next.endTime,
+      current.id,
+    );
 
     const timesChanged =
       next.startTime.getTime() !== current.startTime.getTime() ||

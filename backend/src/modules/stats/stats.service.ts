@@ -1,27 +1,27 @@
 import { Decimal } from "decimal.js";
 import { prisma } from "../../config/prisma.js";
 import {
+  calculateHourlyMonthPay,
   calculateMonthBalance,
-  calculateMonthlyPay,
   calculatePaidMoney,
   calculateTotalBalance,
 } from "../../core/calculations.js";
-import { utcMidnight } from "../../core/dateUtils.js";
+import { monthDateRange, parseYmd, berlinYmd, ymdFromDateColumn, ymdToDateColumn } from "../../core/berlin.js";
 import { HttpError } from "../../middleware/errorHandler.js";
-
-function monthRangeUtc(year: number, month: number): { gte: Date; lt: Date } {
-  return {
-    gte: new Date(Date.UTC(year, month - 1, 1)),
-    lt: new Date(Date.UTC(year, month, 1)),
-  };
-}
+import {
+  periodsOverlapMonth,
+  termsOnYmd,
+  type TermsSlice,
+} from "../terms/terms.range.js";
+import { toSlice } from "../terms/terms.service.js";
 
 function monthIndex(year: number, month: number): number {
   return year * 12 + month;
 }
 
-function utcYearMonth(d: Date): { year: number; month: number } {
-  return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1 };
+function yearMonthFromDateColumn(d: Date): { year: number; month: number } {
+  const { year, month } = parseYmd(ymdFromDateColumn(d));
+  return { year, month };
 }
 
 function ymKey(year: number, month: number): string {
@@ -32,54 +32,87 @@ function decStr(value: Decimal): string {
   return value.toString();
 }
 
-function monthCountWindow(
-  year: number,
-  month: number,
-  hiredAt: Date,
-  today: Date,
-): { from: Date; to: Date } | null {
-  const monthStart = new Date(Date.UTC(year, month - 1, 1));
-  const monthLast = new Date(Date.UTC(year, month, 0));
-  const hired = utcMidnight(hiredAt);
-  const todayD = utcMidnight(today);
-  const from = hired.getTime() > monthStart.getTime() ? hired : monthStart;
-  const to = todayD.getTime() < monthLast.getTime() ? todayD : monthLast;
-  if (from.getTime() > to.getTime()) return null;
-  return { from, to };
+function lastYmdOfMonth(year: number, month: number): string {
+  return ymdFromDateColumn(new Date(Date.UTC(year, month, 0)));
 }
 
-function toPayEmployee(employee: {
-  payType: "HOURLY" | "SALARY";
-  hourlyRate: { toString(): string } | null;
-  monthlySalary: { toString(): string } | null;
-}) {
+function monthCountWindow(
+  year: number, month: number,
+  hiredAt: Date,
+  todayYmd: string,
+): { from: Date; to: Date } | null {
+  const monthStartYmd = ymdFromDateColumn(new Date(Date.UTC(year, month - 1, 1)));
+  const monthLastYmd = lastYmdOfMonth(year, month);
+  const hiredYmd = ymdFromDateColumn(hiredAt);
+  const fromYmd = hiredYmd > monthStartYmd ? hiredYmd : monthStartYmd;
+  const toYmd = todayYmd < monthLastYmd ? todayYmd : monthLastYmd;
+  if (fromYmd > toYmd) return null;
+  return { from: ymdToDateColumn(fromYmd), to: ymdToDateColumn(toYmd) };
+}
+
+function hoursLookup(periods: TermsSlice[]): (ymd: string) => Decimal {
+  return (ymd) => {
+    const t = termsOnYmd(periods, ymd);
+    if (!t) {
+      throw new Error("missing terms");
+    }
+    return t.hoursPerDay;
+  };
+}
+
+function payForWindow(
+  lastYmd: string,
+  hoursByYmd: Map<string, Decimal>,
+  periods: TermsSlice[],
+): Decimal {
+  const last = termsOnYmd(periods, lastYmd);
+  if (!last) {
+    throw new Error("missing terms");
+  }
+  if (last.payType === "SALARY") {
+    if (last.monthlySalary == null) {
+      throw new Error("SALARY employee missing monthlySalary");
+    }
+    return last.monthlySalary;
+  }
+  return calculateHourlyMonthPay(hoursByYmd, (ymd) => {
+    const t = termsOnYmd(periods, ymd);
+    if (!t || t.payType !== "HOURLY") return new Decimal(0);
+    return t.hourlyRate;
+  });
+}
+
+function serializeTerm(period: TermsSlice) {
   return {
-    payType: employee.payType,
-    hourlyRate:
-      employee.hourlyRate == null ? null : new Decimal(employee.hourlyRate.toString()),
-    monthlySalary:
-      employee.monthlySalary == null
-        ? null
-        : new Decimal(employee.monthlySalary.toString()),
+    payType: period.payType,
+    hourlyRate: period.hourlyRate?.toString() ?? null,
+    monthlySalary: period.monthlySalary?.toString() ?? null,
+    hoursPerDay: period.hoursPerDay.toString(),
+    validFrom: period.validFrom,
+    validTo: period.validTo,
   };
 }
 
 export async function getEmployeeStats(employeeId: string, year: number, month: number) {
   const employee = await prisma.employee.findUnique({
     where: { id: employeeId },
-    include: { user: { select: { login: true } } },
+    include: {
+      user: { select: { login: true } },
+      terms: { orderBy: { validFrom: "asc" } },
+    },
   });
   if (!employee) {
     throw new HttpError(404, "Not found");
   }
 
-  const hired = utcYearMonth(employee.hiredAt);
+  const hired = yearMonthFromDateColumn(employee.hiredAt);
   if (monthIndex(year, month) < monthIndex(hired.year, hired.month)) {
     throw new HttpError(404, "Not found");
   }
 
-  const rangeStart = monthRangeUtc(hired.year, hired.month).gte;
-  const rangeEnd = monthRangeUtc(year, month).lt;
+  const periods = employee.terms.map(toSlice);
+  const rangeStart = monthDateRange(hired.year, hired.month).gte;
+  const rangeEnd = monthDateRange(year, month).lt;
 
   const [shifts, sickDays, overtimePayouts] = await Promise.all([
     prisma.shift.findMany({
@@ -94,7 +127,7 @@ export async function getEmployeeStats(employeeId: string, year: number, month: 
         employeeId,
         date: { gte: rangeStart, lt: rangeEnd },
       },
-      select: { date: true, creditedHours: true },
+      select: { date: true },
     }),
     prisma.overtimePayout.findMany({
       where: {
@@ -107,67 +140,87 @@ export async function getEmployeeStats(employeeId: string, year: number, month: 
 
   const shiftsByMonth = new Map<string, { date: Date; workedMinutes: number }[]>();
   for (const s of shifts) {
-    const { year: y, month: m } = utcYearMonth(s.date);
+    const { year: y, month: m } = yearMonthFromDateColumn(s.date);
     const key = ymKey(y, m);
     const list = shiftsByMonth.get(key) ?? [];
     list.push({ date: s.date, workedMinutes: s.workedMinutes });
     shiftsByMonth.set(key, list);
   }
 
-  const sickByMonth = new Map<string, { date: Date; creditedHours: Decimal }[]>();
+  const sickByMonth = new Map<string, { date: Date }[]>();
   for (const d of sickDays) {
-    const { year: y, month: m } = utcYearMonth(d.date);
+    const { year: y, month: m } = yearMonthFromDateColumn(d.date);
     const key = ymKey(y, m);
     const list = sickByMonth.get(key) ?? [];
-    list.push({ date: d.date, creditedHours: new Decimal(d.creditedHours.toString()) });
+    list.push({ date: d.date });
     sickByMonth.set(key, list);
   }
 
-  const hoursPerDay = new Decimal(employee.hoursPerDay.toString());
-  const today = new Date();
+  const todayYmd = berlinYmd(new Date());
+  const todayTerms = termsOnYmd(periods, todayYmd) ?? termsOnYmd(periods, ymdFromDateColumn(employee.hiredAt));
+  if (!todayTerms) {
+    throw new HttpError(500, "Internal server error");
+  }
+  const hoursPerDay = todayTerms.hoursPerDay;
   const monthlyBalances: Decimal[] = [];
-  const closedMonthWorkedHours: Decimal[] = [];
+  const closedMonthPays: Decimal[] = [];
   let selected: {
     workedHours: Decimal;
     normHours: Decimal;
     balance: Decimal;
+    hoursByYmd: Map<string, Decimal>;
   } | null = null;
+  let monthlyPay = new Decimal(0);
 
   const emptyMonth = {
     workedHours: new Decimal(0),
     normHours: new Decimal(0),
     balance: new Decimal(0),
+    hoursByYmd: new Map<string, Decimal>(),
   };
 
-  for (
-    let y = hired.year, m = hired.month;
-    monthIndex(y, m) <= monthIndex(year, month);
+  try {
+    for (
+      let y = hired.year, m = hired.month;
+      monthIndex(y, m) <= monthIndex(year, month);
 
-  ) {
-    const key = ymKey(y, m);
-    const window = monthCountWindow(y, m, employee.hiredAt, today);
-    const monthResult = window
-      ? calculateMonthBalance({
-          shifts: shiftsByMonth.get(key) ?? [],
-          sickDays: sickByMonth.get(key) ?? [],
-          hoursPerDay,
-          from: window.from,
-          to: window.to,
-        })
-      : emptyMonth;
-    monthlyBalances.push(monthResult.balance);
-    const monthLast = utcMidnight(new Date(Date.UTC(y, m, 0)));
-    if (monthLast.getTime() <= utcMidnight(today).getTime()) {
-      closedMonthWorkedHours.push(monthResult.workedHours);
+    ) {
+      const key = ymKey(y, m);
+      const window = monthCountWindow(y, m, employee.hiredAt, todayYmd);
+      const monthResult = window
+        ? calculateMonthBalance({
+            shifts: shiftsByMonth.get(key) ?? [],
+            sickDays: sickByMonth.get(key) ?? [],
+            hoursPerDay: hoursLookup(periods),
+            from: window.from,
+            to: window.to,
+          })
+        : emptyMonth;
+      monthlyBalances.push(monthResult.balance);
+      if (window && lastYmdOfMonth(y, m) <= todayYmd) {
+        closedMonthPays.push(
+          payForWindow(ymdFromDateColumn(window.to), monthResult.hoursByYmd, periods),
+        );
+      }
+      if (y === year && m === month) {
+        selected = monthResult;
+        if (window) {
+          monthlyPay = payForWindow(
+            ymdFromDateColumn(window.to),
+            monthResult.hoursByYmd,
+            periods,
+          );
+        }
+      }
+      m += 1;
+      if (m > 12) {
+        m = 1;
+        y += 1;
+      }
     }
-    if (y === year && m === month) {
-      selected = monthResult;
-    }
-    m += 1;
-    if (m > 12) {
-      m = 1;
-      y += 1;
-    }
+  } catch (err) {
+    console.error("pay calculation failed", { employeeId, err });
+    throw new HttpError(500, "Internal server error");
   }
 
   if (!selected) {
@@ -186,20 +239,22 @@ export async function getEmployeeStats(employeeId: string, year: number, month: 
     paidOvertimeHours,
   });
 
-  const payEmployee = toPayEmployee(employee);
-  let monthlyPay: Decimal;
   let paid: { total: Decimal; base: Decimal; overtime: Decimal };
   try {
-    monthlyPay = calculateMonthlyPay(payEmployee, selected.workedHours);
     paid = calculatePaidMoney({
-      employee: payEmployee,
-      closedMonthWorkedHours,
+      closedMonthPays,
       overtimePayoutAmount,
     });
   } catch (err) {
     console.error("pay calculation failed", { employeeId, err });
     throw new HttpError(500, "Internal server error");
   }
+
+  const monthStartYmd = ymdFromDateColumn(new Date(Date.UTC(year, month - 1, 1)));
+  const monthEndYmd = lastYmdOfMonth(year, month);
+  const monthTerms = periods
+    .filter((p) => periodsOverlapMonth(p, monthStartYmd, monthEndYmd))
+    .map(serializeTerm);
 
   return {
     employeeId: employee.id,
@@ -215,6 +270,7 @@ export async function getEmployeeStats(employeeId: string, year: number, month: 
     paidBase: decStr(paid.base),
     paidOvertimeAmount: decStr(paid.overtime),
     hoursPerDay: decStr(hoursPerDay),
+    terms: monthTerms,
   };
 }
 
@@ -227,7 +283,7 @@ export async function getStatsOverview(year: number, month: number) {
 
   const rows = [];
   for (const employee of employees) {
-    const hired = utcYearMonth(employee.hiredAt);
+    const hired = yearMonthFromDateColumn(employee.hiredAt);
     if (monthIndex(year, month) < monthIndex(hired.year, hired.month)) {
       continue;
     }

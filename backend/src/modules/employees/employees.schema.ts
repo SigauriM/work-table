@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { calendarYmdSchema } from "../../core/calendarYmd.js";
 
 const payTypeSchema = z.enum(["HOURLY", "SALARY"]);
 
@@ -20,7 +21,7 @@ export const createEmployeeSchema = z
     monthlySalary: z.string().optional(),
     hoursPerDay: z.string().min(1),
     daysPerWeek: z.number().int().min(1).max(7),
-    hiredAt: z.coerce.date(),
+    hiredAt: calendarYmdSchema,
   })
   .superRefine((data, ctx) => {
     if (data.payType === "HOURLY" && !data.hourlyRate) {
@@ -42,10 +43,19 @@ export const updateEmployeeSchema = z
     monthlySalary: z.string().nullable().optional(),
     hoursPerDay: z.string().min(1).optional(),
     daysPerWeek: z.number().int().min(1).max(7).optional(),
-    hiredAt: z.coerce.date().optional(),
+    hiredAt: calendarYmdSchema.optional(),
     isActive: z.boolean().optional(),
+    effectiveFrom: calendarYmdSchema.optional(),
   })
   .superRefine((data, ctx) => {
+    const termsTouched =
+      data.payType !== undefined ||
+      data.hourlyRate !== undefined ||
+      data.monthlySalary !== undefined ||
+      data.hoursPerDay !== undefined;
+    if (termsTouched && !data.effectiveFrom) {
+      ctx.addIssue({ code: "custom", path: ["effectiveFrom"], message: "Required" });
+    }
     if (data.payType === "HOURLY") {
       if (data.hourlyRate === undefined || data.hourlyRate === null || data.hourlyRate === "") {
         ctx.addIssue({ code: "custom", path: ["hourlyRate"], message: "Required" });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Decimal } from "decimal.js";
 import {
+  calculateHourlyMonthPay,
   calculateMonthBalance,
   calculateMonthlyPay,
   calculatePaidMoney,
@@ -56,6 +57,7 @@ describe("calculateWorkedMinutes", () => {
 
 describe("calculateMonthBalance", () => {
   const hoursPerDay = new Decimal("8");
+  const hours = () => hoursPerDay;
   const wed = at("2026-08-12T00:00:00.000Z");
   const thu = at("2026-08-13T00:00:00.000Z");
   const sat = at("2026-08-15T00:00:00.000Z");
@@ -64,7 +66,7 @@ describe("calculateMonthBalance", () => {
     const r = calculateMonthBalance({
       shifts: [{ date: wed, workedMinutes: 10 * 60 }],
       sickDays: [],
-      hoursPerDay,
+      hoursPerDay: hours,
       from: wed,
       to: wed,
     });
@@ -77,7 +79,7 @@ describe("calculateMonthBalance", () => {
     const r = calculateMonthBalance({
       shifts: [{ date: wed, workedMinutes: 6 * 60 }],
       sickDays: [],
-      hoursPerDay,
+      hoursPerDay: hours,
       from: wed,
       to: wed,
     });
@@ -88,7 +90,7 @@ describe("calculateMonthBalance", () => {
     const r = calculateMonthBalance({
       shifts: [],
       sickDays: [],
-      hoursPerDay,
+      hoursPerDay: hours,
       from: wed,
       to: wed,
     });
@@ -101,7 +103,7 @@ describe("calculateMonthBalance", () => {
     const r = calculateMonthBalance({
       shifts: [{ date: sat, workedMinutes: 10 * 60 }],
       sickDays: [],
-      hoursPerDay,
+      hoursPerDay: hours,
       from: sat,
       to: sat,
     });
@@ -109,11 +111,11 @@ describe("calculateMonthBalance", () => {
     expect(r.balance.toString()).toBe("10");
   });
 
-  it("sick day credited at hoursPerDay → on norm", () => {
+  it("sick day credited at that day's norm → on norm", () => {
     const r = calculateMonthBalance({
       shifts: [],
-      sickDays: [{ date: thu, creditedHours: new Decimal("8") }],
-      hoursPerDay,
+      sickDays: [{ date: thu }],
+      hoursPerDay: hours,
       from: thu,
       to: thu,
     });
@@ -121,17 +123,55 @@ describe("calculateMonthBalance", () => {
     expect(r.balance.toString()).toBe("0");
   });
 
+  it("weekend sick day is 0 hours and 0 norm", () => {
+    const r = calculateMonthBalance({
+      shifts: [],
+      sickDays: [{ date: sat }],
+      hoursPerDay: hours,
+      from: sat,
+      to: sat,
+    });
+    expect(r.workedHours.toString()).toBe("0");
+    expect(r.normHours.toString()).toBe("0");
+    expect(r.balance.toString()).toBe("0");
+  });
+
+  it("uses each day's hoursPerDay, not a single current value", () => {
+    const r = calculateMonthBalance({
+      shifts: [],
+      sickDays: [],
+      hoursPerDay: (ymd) => (ymd < "2026-08-13" ? new Decimal("8") : new Decimal("6")),
+      from: wed,
+      to: thu,
+    });
+    expect(r.normHours.toString()).toBe("14");
+    expect(r.balance.toString()).toBe("-14");
+  });
+
   it("from after to → zeros", () => {
     const r = calculateMonthBalance({
       shifts: [{ date: wed, workedMinutes: 480 }],
       sickDays: [],
-      hoursPerDay,
+      hoursPerDay: hours,
       from: thu,
       to: wed,
     });
     expect(r.workedHours.toString()).toBe("0");
     expect(r.normHours.toString()).toBe("0");
     expect(r.balance.toString()).toBe("0");
+  });
+
+  it("YMD loop keeps all days across the 2026 spring DST change", () => {
+    const r = calculateMonthBalance({
+      shifts: [],
+      sickDays: [],
+      hoursPerDay: hours,
+      from: at("2026-03-28T00:00:00.000Z"),
+      to: at("2026-03-30T00:00:00.000Z"),
+    });
+    expect(r.workedHours.toString()).toBe("0");
+    expect(r.normHours.toString()).toBe("8");
+    expect(r.balance.toString()).toBe("-8");
   });
 });
 
@@ -207,22 +247,34 @@ describe("calculateMonthlyPay", () => {
   });
 });
 
-describe("calculatePaidMoney", () => {
-  const hourly = {
-    payType: "HOURLY" as const,
-    hourlyRate: new Decimal("12.50"),
-    monthlySalary: null,
-  };
-  const salary = {
-    payType: "SALARY" as const,
-    hourlyRate: null,
-    monthlySalary: new Decimal("2000"),
-  };
+describe("calculateHourlyMonthPay", () => {
+  it("sums each day's hours × that day's rate", () => {
+    const hours = new Map<string, Decimal>([
+      ["2026-08-12", new Decimal("8")],
+      ["2026-08-13", new Decimal("10")],
+    ]);
+    const pay = calculateHourlyMonthPay(hours, (ymd) =>
+      ymd < "2026-08-13" ? new Decimal("10") : new Decimal("12"),
+    );
+    expect(pay.toString()).toBe("200");
+  });
 
-  it("HOURLY: hours × rate plus overtime payout amounts", () => {
+  it("SALARY days contribute 0 in an HOURLY month", () => {
+    const hours = new Map<string, Decimal>([
+      ["2026-08-12", new Decimal("8")],
+      ["2026-08-13", new Decimal("8")],
+    ]);
+    const pay = calculateHourlyMonthPay(hours, (ymd) =>
+      ymd < "2026-08-13" ? new Decimal("10") : new Decimal(0),
+    );
+    expect(pay.toString()).toBe("80");
+  });
+});
+
+describe("calculatePaidMoney", () => {
+  it("sums already computed closed-month pays plus overtime payout amounts", () => {
     const r = calculatePaidMoney({
-      employee: hourly,
-      closedMonthWorkedHours: [new Decimal("160"), new Decimal("80")],
+      closedMonthPays: [new Decimal("2000"), new Decimal("1000")],
       overtimePayoutAmount: new Decimal("100"),
     });
     expect(r.base.toString()).toBe("3000");
@@ -230,21 +282,18 @@ describe("calculatePaidMoney", () => {
     expect(r.total.toString()).toBe("3100");
   });
 
-  it("SALARY: salary × closed months plus overtime payout amounts", () => {
+  it("SALARY months use that month's salary, not today's rate × all months", () => {
     const r = calculatePaidMoney({
-      employee: salary,
-      closedMonthWorkedHours: [new Decimal("0"), new Decimal("10"), new Decimal("200")],
+      closedMonthPays: [new Decimal("2000"), new Decimal("2500")],
       overtimePayoutAmount: new Decimal("50"),
     });
-    expect(r.base.toString()).toBe("6000");
-    expect(r.overtime.toString()).toBe("50");
-    expect(r.total.toString()).toBe("6050");
+    expect(r.base.toString()).toBe("4500");
+    expect(r.total.toString()).toBe("4550");
   });
 
   it("no closed months → only overtime", () => {
     const r = calculatePaidMoney({
-      employee: salary,
-      closedMonthWorkedHours: [],
+      closedMonthPays: [],
       overtimePayoutAmount: new Decimal("40"),
     });
     expect(r.base.toString()).toBe("0");

@@ -1,5 +1,6 @@
 import { Decimal } from "decimal.js";
 import { z } from "zod";
+import { calendarYmdSchema } from "../../core/calendarYmd.js";
 
 function positiveDecimalString() {
   return z.string().min(1).superRefine((val, ctx) => {
@@ -32,7 +33,7 @@ export const listPayoutsQuerySchema = z
   });
 
 export const createOvertimePayoutSchema = z.object({
-  date: z.coerce.date(),
+  date: calendarYmdSchema,
   hoursPaid: positiveDecimalString(),
   amount: positiveDecimalString(),
   note: z.string().optional(),

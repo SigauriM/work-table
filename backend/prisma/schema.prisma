@@ -28,19 +28,16 @@ model User {
 }
 
 model Employee {
-  id             String   @id @default(uuid())
-  userId         String   @unique
-  user           User     @relation(fields: [userId], references: [id])
-  firstName      String
-  lastName       String
-  payType        PayType
-  hourlyRate     Decimal? @db.Decimal(10, 2)
-  monthlySalary  Decimal? @db.Decimal(10, 2)
-  hoursPerDay    Decimal  @db.Decimal(4, 2)
-  daysPerWeek    Int
-  hiredAt        DateTime
-  isActive       Boolean  @default(true)
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id])
+  firstName   String
+  lastName    String
+  daysPerWeek Int
+  hiredAt     DateTime
+  isActive    Boolean  @default(true)
 
+  terms           EmployeeTerms[]
   shifts          Shift[]
   sickDays        SickDay[]
   overtimePayouts OvertimePayout[]
@@ -48,30 +45,43 @@ model Employee {
   @@index([isActive])
 }
 
-model Shift {
-  id            String   @id @default(uuid())
+model EmployeeTerms {
+  id            String    @id @default(uuid())
   employeeId    String
-  employee      Employee @relation(fields: [employeeId], references: [id])
-  date          DateTime @db.Date
+  employee      Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  payType       PayType
+  hourlyRate    Decimal?  @db.Decimal(10, 2)
+  monthlySalary Decimal?  @db.Decimal(10, 2)
+  hoursPerDay   Decimal   @db.Decimal(4, 2)
+  validFrom     DateTime  @db.Date
+  validTo       DateTime? @db.Date
+
+  @@index([employeeId, validFrom])
+}
+
+model Shift {
+  id            String    @id @default(uuid())
+  employeeId    String
+  employee      Employee  @relation(fields: [employeeId], references: [id])
+  date          DateTime  @db.Date
   startTime     DateTime
   endTime       DateTime
   breakStart    DateTime?
   breakEnd      DateTime?
   workedMinutes Int
   note          String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   @@index([employeeId, date])
 }
 
 model SickDay {
-  id            String   @id @default(uuid())
-  employeeId    String
-  employee      Employee @relation(fields: [employeeId], references: [id])
-  date          DateTime @db.Date
-  creditedHours Decimal  @db.Decimal(4, 2)
-  note          String?
+  id         String   @id @default(uuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  date       DateTime @db.Date
+  note       String?
 
   @@unique([employeeId, date])
   @@index([employeeId, date])

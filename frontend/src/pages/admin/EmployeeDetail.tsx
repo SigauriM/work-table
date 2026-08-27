@@ -24,6 +24,7 @@ import type {
   PayType,
   Shift,
   SickDay,
+  UpdateEmployeeBody,
 } from "../../types/api";
 import { btnPrimary, btnSecondary, inputClass } from "../../ui";
 
@@ -51,6 +52,7 @@ export default function EmployeeDetail() {
   const [daysPerWeek, setDaysPerWeek] = useState("5");
   const [hiredAt, setHiredAt] = useState("");
   const [isActive, setIsActive] = useState(true);
+  const [effectiveFrom, setEffectiveFrom] = useState("");
 
   const [otDate, setOtDate] = useState("");
   const [otHours, setOtHours] = useState("");
@@ -79,6 +81,7 @@ export default function EmployeeDetail() {
       setDaysPerWeek(String(emp.daysPerWeek));
       setHiredAt(calendarYmdFromIso(emp.hiredAt));
       setIsActive(emp.isActive);
+      setEffectiveFrom("");
 
       const [st, sh, sk, ot] = await Promise.all([
         employeeStats(id, year, month),
@@ -119,26 +122,34 @@ export default function EmployeeDetail() {
 
   async function onSave(e: FormEvent) {
     e.preventDefault();
-    if (!id) return;
+    if (!id || !employee) return;
     setPending(true);
     setError(null);
     try {
-      const body = {
+      const body: UpdateEmployeeBody = {
         login: login.trim(),
         firstName: firstName.trim(),
         lastName: lastName.trim(),
-        payType,
-        hourlyRate: payType === "HOURLY" ? hourlyRate.trim() : null,
-        monthlySalary: payType === "SALARY" ? monthlySalary.trim() : null,
-        hoursPerDay: hoursPerDay.trim(),
         daysPerWeek: Number(daysPerWeek),
-        hiredAt,
         isActive,
       };
-      await updateEmployee(id, {
-        ...body,
-        ...(password.trim() ? { password: password.trim() } : {}),
-      });
+      if (password.trim()) body.password = password.trim();
+      const hiredYmd = calendarYmdFromIso(employee.hiredAt);
+      if (hiredAt !== hiredYmd) body.hiredAt = hiredAt;
+      const termsChanged =
+        payType !== employee.payType ||
+        hoursPerDay.trim() !== employee.hoursPerDay ||
+        (payType === "HOURLY"
+          ? hourlyRate.trim() !== (employee.hourlyRate ?? "")
+          : monthlySalary.trim() !== (employee.monthlySalary ?? ""));
+      if (termsChanged) {
+        body.payType = payType;
+        body.hourlyRate = payType === "HOURLY" ? hourlyRate.trim() : null;
+        body.monthlySalary = payType === "SALARY" ? monthlySalary.trim() : null;
+        body.hoursPerDay = hoursPerDay.trim();
+        body.effectiveFrom = effectiveFrom;
+      }
+      await updateEmployee(id, body);
       setPassword("");
       await load();
     } catch (err) {
@@ -203,6 +214,13 @@ export default function EmployeeDetail() {
   }
 
   const title = employee ? `${employee.lastName} ${employee.firstName}` : "Employee";
+  const termsDirty =
+    !!employee &&
+    (payType !== employee.payType ||
+      hoursPerDay.trim() !== employee.hoursPerDay ||
+      (payType === "HOURLY"
+        ? hourlyRate.trim() !== (employee.hourlyRate ?? "")
+        : monthlySalary.trim() !== (employee.monthlySalary ?? "")));
 
   return (
     <AppShell title={title} nav={adminNav}>
@@ -329,7 +347,8 @@ export default function EmployeeDetail() {
                 disabled={pending}
               />
               <span className="text-xs text-neutral-500">
-                Daily norm for overtime and undertime. Changing this recalculates past stats.
+                Daily norm Mon–Fri. Closed periods cannot be edited. Changing pay or hours/day
+                requires Effective from.
               </span>
             </label>
             <label className="flex flex-1 flex-col gap-1 text-sm">
@@ -347,6 +366,37 @@ export default function EmployeeDetail() {
             </label>
           </div>
           <label className="flex flex-col gap-1 text-sm">
+            Effective from
+            <input
+              type="date"
+              className={inputClass}
+              value={effectiveFrom}
+              onChange={(e) => setEffectiveFrom(e.target.value)}
+              required={termsDirty}
+              disabled={pending}
+            />
+            <span className="text-xs text-neutral-500">
+              Required only when pay type, rate, salary, or hours/day change. Splits the open
+              period; closed periods stay as they are.
+            </span>
+          </label>
+          {employee.terms && employee.terms.length > 0 ? (
+            <div className="flex flex-col gap-1 text-sm">
+              <span className="font-medium">Terms history</span>
+              <ul className="flex flex-col gap-1 text-xs text-neutral-600">
+                {employee.terms.map((t) => (
+                  <li key={`${t.validFrom}:${t.validTo ?? "open"}`}>
+                    {t.validFrom} – {t.validTo ?? "open"} · {t.payType} · {t.hoursPerDay} h/day
+                    {t.payType === "HOURLY"
+                      ? ` · ${t.hourlyRate ?? "—"}/h`
+                      : ` · ${t.monthlySalary ?? "—"}`}
+                    {t.validTo ? " · closed" : ""}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          <label className="flex flex-col gap-1 text-sm">
             Hired at
             <input
               type="date"
@@ -354,7 +404,7 @@ export default function EmployeeDetail() {
               value={hiredAt}
               onChange={(e) => setHiredAt(e.target.value)}
               required
-              disabled={pending}
+              disabled={pending || (employee.terms?.length ?? 0) > 1}
             />
           </label>
           <label className="flex min-h-11 items-center gap-2 text-sm">

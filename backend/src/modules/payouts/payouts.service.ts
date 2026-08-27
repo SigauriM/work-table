@@ -1,4 +1,5 @@
 import { prisma } from "../../config/prisma.js";
+import { monthDateRange, ymdToDateColumn } from "../../core/berlin.js";
 import { HttpError } from "../../middleware/errorHandler.js";
 import type { z } from "zod";
 import type {
@@ -8,17 +9,6 @@ import type {
 
 type ListQuery = z.infer<typeof listPayoutsQuerySchema>;
 type CreateOvertimeInput = z.infer<typeof createOvertimePayoutSchema>;
-
-function monthRangeUtc(year: number, month: number): { gte: Date; lt: Date } {
-  return {
-    gte: new Date(Date.UTC(year, month - 1, 1)),
-    lt: new Date(Date.UTC(year, month, 1)),
-  };
-}
-
-function dateOnlyUtc(d: Date): Date {
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-}
 
 function decStr(value: { toString(): string }) {
   return value.toString();
@@ -54,7 +44,7 @@ export async function listOvertimePayouts(employeeId: string, query: ListQuery) 
   await assertEmployee(employeeId);
   const range =
     query.year !== undefined && query.month !== undefined
-      ? monthRangeUtc(query.year, query.month)
+      ? monthDateRange(query.year, query.month)
       : undefined;
   const rows = await prisma.overtimePayout.findMany({
     where: {
@@ -71,7 +61,7 @@ export async function createOvertimePayout(employeeId: string, input: CreateOver
   const row = await prisma.overtimePayout.create({
     data: {
       employeeId,
-      date: dateOnlyUtc(input.date),
+      date: ymdToDateColumn(input.date),
       hoursPaid: input.hoursPaid,
       amount: input.amount,
       note: input.note ?? null,

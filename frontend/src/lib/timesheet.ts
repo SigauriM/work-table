@@ -81,6 +81,16 @@ export function weekdayNormHours(dateYmd: string, hoursPerDay: number) {
   return isUtcWeekend(dateYmd) ? 0 : hoursPerDay;
 }
 
+export function hoursPerDayForYmd(
+  ymd: string,
+  terms: { validFrom: string; validTo: string | null; hoursPerDay: string }[] | undefined,
+  fallback: string | undefined,
+): number {
+  const hit = terms?.find((t) => t.validFrom <= ymd && (t.validTo == null || ymd <= t.validTo));
+  const n = Number(hit?.hoursPerDay ?? fallback);
+  return Number.isFinite(n) && n > 0 ? n : 8;
+}
+
 /** Live shift length in hours from Berlin clock fields, including overnight. */
 export function countedShiftHours(
   dateYmd: string,

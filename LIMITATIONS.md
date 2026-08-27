@@ -10,44 +10,27 @@ A shift may cross midnight (`endTime` on the next calendar day).
 Consequence: a shift starting on the 31st and ending on the 1st
 counts entirely toward the month of the 31st.
 
-## Timezone: UTC vs Europe/Berlin (production blocker)
+## Terms history
 
-Month filters and the shift `date` field currently use UTC, not Europe/Berlin.
+Pay type, rates, and `hoursPerDay` live in `EmployeeTerms` periods.
 
-Example: a shift entered at 00:30 on 1 March in Berlin is 28 February 23:30 UTC
-and can land in the previous month for payroll.
+Closed periods (`validTo` set) are immutable. An admin can only split the open
+tail (`validTo` null) with `effectiveFrom`. Past months keep the terms that
+applied on each day.
 
-This is acceptable while shifts are entered during daytime in testing.
-It must be fixed before production (frontend / phones will enter times around the clock).
-Stage 8 frontend treats form date/time as UTC (see below). Full Europe/Berlin on the backend remains a pre-deploy / production fix.
+`daysPerWeek` stays on `Employee` and is not used in calculations (daily norm
+is Mon–Fri; weekends 0).
 
-Unlike overnight shifts (a functional limitation with a defined rule),
-UTC vs Berlin is a **production blocker**, not just reduced feature scope.
+SALARY for a month is the full monthly salary from terms on the last day of
+that count window — not prorated by hire day. `paidBase` sums each closed
+month's own pay, not today's rate × all months.
 
-## hoursPerDay changes rewrite history
+Weekend sick days credit 0 hours (the day's norm).
 
-Day and month balances in stats always use the employee's *current* `hoursPerDay`.
+## hiredAt is DateTime, not Date
 
-There is no per-day or per-month norm history. If an admin changes `hoursPerDay`,
-past months' balances in `/stats` recalculate with the new daily norm.
-
-## hiredAt month boundary uses UTC
-
-The "month of hire" for stats 404 / overview inclusion is derived from `hiredAt` in UTC
-(same class of issue as UTC vs Europe/Berlin). A Berlin local midnight hire date
-stored with a non-Z offset can shift the hire month. Prefer storing hire dates as
-UTC midnight calendar dates until timezone handling is fixed.
-
-## Frontend stage 8: form times are UTC
-
-Shift and sick-day date/time fields in the UI are interpreted as UTC and sent with a `Z` suffix
-(via `frontend/src/lib/datetime.ts`).
-
-Example: entering `22:00` means 22:00 UTC, not 22:00 Europe/Berlin
-(about one hour earlier on the wall clock in Germany in winter).
-
-This matches current backend month boundaries. Replacing UTC with Berlin timezone
-is still required before production.
+Hire month for stats is the calendar YMD of `hiredAt` (UTC midnight of that day).
+The API accepts `"YYYY-MM-DD"`. Do not send a Berlin-midnight instant.
 
 ## Refresh tokens are not rotated
 

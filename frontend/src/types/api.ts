@@ -19,6 +19,15 @@ export type ApiErrorBody = {
 
 export type PayType = "HOURLY" | "SALARY";
 
+export type EmployeeTerms = {
+  payType: PayType;
+  hourlyRate: string | null;
+  monthlySalary: string | null;
+  hoursPerDay: string;
+  validFrom: string;
+  validTo: string | null;
+};
+
 export type Employee = {
   id: string;
   userId: string;
@@ -32,6 +41,7 @@ export type Employee = {
   daysPerWeek: number;
   hiredAt: string;
   isActive: boolean;
+  terms?: EmployeeTerms[];
 };
 
 export type Shift = {
@@ -50,7 +60,6 @@ export type SickDay = {
   id: string;
   employeeId: string;
   date: string;
-  creditedHours?: string;
   note: string | null;
 };
 
@@ -68,6 +77,7 @@ export type EmployeeStats = {
   paidBase: string;
   paidOvertimeAmount: string;
   hoursPerDay: string;
+  terms?: EmployeeTerms[];
 };
 
 export type OverviewRow = {
@@ -105,6 +115,7 @@ export type UpdateEmployeeBody = {
   daysPerWeek?: number;
   hiredAt?: string;
   isActive?: boolean;
+  effectiveFrom?: string;
 };
 
 export type CreateShiftBody = {

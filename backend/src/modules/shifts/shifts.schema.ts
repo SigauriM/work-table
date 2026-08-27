@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { calendarYmdSchema } from "../../core/calendarYmd.js";
 
 /**
  * endTime должен быть строго после startTime.
@@ -73,7 +74,7 @@ export const listShiftsQuerySchema = z
 export const createShiftSchema = z
   .object({
     employeeId: z.string().uuid(),
-    date: z.coerce.date(),
+    date: calendarYmdSchema,
     startTime: z.coerce.date(),
     endTime: z.coerce.date(),
     breakStart: z.coerce.date().nullish(),
@@ -84,7 +85,7 @@ export const createShiftSchema = z
 
 export const updateShiftSchema = z
   .object({
-    date: z.coerce.date().optional(),
+    date: calendarYmdSchema.optional(),
     startTime: z.coerce.date().optional(),
     endTime: z.coerce.date().optional(),
     breakStart: z.coerce.date().nullish(),

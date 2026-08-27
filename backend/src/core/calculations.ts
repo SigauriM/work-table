@@ -1,5 +1,6 @@
 import { Decimal } from "decimal.js";
-import { differenceInMinutes, isUtcWeekendDate, utcDateKey, utcMidnight } from "./dateUtils.js";
+import { isWeekendYmd, nextBerlinYmd, ymdFromDateColumn } from "./berlin.js";
+import { differenceInMinutes } from "./dateUtils.js";
 
 export type ShiftForMinutes = {
   startTime: Date;
@@ -23,48 +24,63 @@ export function calculateWorkedMinutes(shift: ShiftForMinutes): number {
   return Math.max(0, total - breakMin);
 }
 
+/** Workdays (Mon–Fri) use the day's hoursPerDay; weekends 0. */
+export function hoursPerDayForYmd(
+  dayYmd: string,
+  hoursPerDay: (ymd: string) => Decimal,
+): Decimal {
+  return isWeekendYmd(dayYmd) ? new Decimal(0) : hoursPerDay(dayYmd);
+}
+
 /**
  * Per calendar day: hours that day − daily norm.
- * Workdays (Mon–Fri UTC) use hoursPerDay; weekends 0.
+ * Workdays (Mon–Fri) use hoursPerDay for that YMD; weekends 0.
+ * Sick credit is that day's norm (weekend sick = 0).
  * Days with no shift/sick still count if they fall in [from, to].
  * Plus = overtime, minus = undertime.
+ * Iterate civil YMD, not +24h on instants (DST).
  */
 export function calculateMonthBalance(input: {
   shifts: { date: Date; workedMinutes: number }[];
-  sickDays: { date: Date; creditedHours: Decimal }[];
-  hoursPerDay: Decimal;
+  sickDays: { date: Date }[];
+  hoursPerDay: (ymd: string) => Decimal;
   from: Date;
   to: Date;
-}): { workedHours: Decimal; normHours: Decimal; balance: Decimal } {
+}): {
+  workedHours: Decimal;
+  normHours: Decimal;
+  balance: Decimal;
+  hoursByYmd: Map<string, Decimal>;
+} {
   const hoursByDay = new Map<string, Decimal>();
   const add = (date: Date, hours: Decimal) => {
-    const key = utcDateKey(date);
+    const key = ymdFromDateColumn(date);
     hoursByDay.set(key, (hoursByDay.get(key) ?? new Decimal(0)).plus(hours));
   };
   for (const s of input.shifts) {
     add(s.date, new Decimal(s.workedMinutes).div(60));
   }
   for (const d of input.sickDays) {
-    add(d.date, d.creditedHours);
+    const dayYmd = ymdFromDateColumn(d.date);
+    add(d.date, hoursPerDayForYmd(dayYmd, input.hoursPerDay));
   }
 
   let workedHours = new Decimal(0);
   let normHours = new Decimal(0);
-  const from = utcMidnight(input.from);
-  const to = utcMidnight(input.to);
-  if (from.getTime() > to.getTime()) {
-    return { workedHours, normHours, balance: new Decimal(0) };
+  const fromYmd = ymdFromDateColumn(input.from);
+  const toYmd = ymdFromDateColumn(input.to);
+  if (fromYmd > toYmd) {
+    return { workedHours, normHours, balance: new Decimal(0), hoursByYmd: hoursByDay };
   }
 
-  for (let t = from.getTime(); t <= to.getTime(); t += 24 * 60 * 60 * 1000) {
-    const day = new Date(t);
-    const hours = hoursByDay.get(utcDateKey(day)) ?? new Decimal(0);
-    const norm = isUtcWeekendDate(day) ? new Decimal(0) : input.hoursPerDay;
+  for (let dayYmd = fromYmd; dayYmd <= toYmd; dayYmd = nextBerlinYmd(dayYmd)) {
+    const hours = hoursByDay.get(dayYmd) ?? new Decimal(0);
+    const norm = hoursPerDayForYmd(dayYmd, input.hoursPerDay);
     workedHours = workedHours.plus(hours);
     normHours = normHours.plus(norm);
   }
 
-  return { workedHours, normHours, balance: workedHours.minus(normHours) };
+  return { workedHours, normHours, balance: workedHours.minus(normHours), hoursByYmd: hoursByDay };
 }
 
 /** Сумма месячных балансов минус выплаченные сверхурочные. Может быть < 0 (переплата). */
@@ -101,33 +117,40 @@ export function calculateMonthlyPay(
 }
 
 /**
+ * HOURLY month: each day's hours × that day's rate.
+ * Caller returns Decimal(0) for SALARY days in a mixed HOURLY month.
+ * Null rate on a day with hours → throw.
+ */
+export function calculateHourlyMonthPay(
+  hoursByYmd: Map<string, Decimal>,
+  hourlyRate: (ymd: string) => Decimal | null,
+): Decimal {
+  let total = new Decimal(0);
+  for (const [ymd, hours] of hoursByYmd) {
+    if (hours.lte(0)) continue;
+    const rate = hourlyRate(ymd);
+    if (rate == null) {
+      throw new Error("HOURLY employee missing hourlyRate");
+    }
+    total = total.plus(hours.times(rate));
+  }
+  return total;
+}
+
+/**
  * Money already paid through closed months + overtime payout amounts.
- * A closed month is decided by the caller (last UTC day of that month has passed).
- * HOURLY base = sum(hours × rate) over closed months.
- * SALARY base = monthlySalary × number of closed months.
- * Overtime = sum of overtime payout amounts (not hours × rate).
+ * A closed month is decided by the caller (last calendar day of that month
+ * ≤ today in Europe/Berlin). Each closed month's pay is already computed
+ * from that month's terms (not today's rate × all months).
  */
 export function calculatePaidMoney(input: {
-  employee: PayEmployee;
-  closedMonthWorkedHours: Decimal[];
+  closedMonthPays: Decimal[];
   overtimePayoutAmount: Decimal;
 }): { total: Decimal; base: Decimal; overtime: Decimal } {
   const overtime = new Decimal(input.overtimePayoutAmount);
   let base = new Decimal(0);
-  if (input.employee.payType === "HOURLY") {
-    if (input.employee.hourlyRate == null) {
-      throw new Error("HOURLY employee missing hourlyRate");
-    }
-    for (const hours of input.closedMonthWorkedHours) {
-      base = base.plus(hours.times(input.employee.hourlyRate));
-    }
-  } else {
-    if (input.employee.monthlySalary == null) {
-      throw new Error("SALARY employee missing monthlySalary");
-    }
-    base = new Decimal(input.employee.monthlySalary).times(
-      input.closedMonthWorkedHours.length,
-    );
+  for (const pay of input.closedMonthPays) {
+    base = base.plus(pay);
   }
   return { total: base.plus(overtime), base, overtime };
 }

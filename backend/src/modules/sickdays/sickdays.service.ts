@@ -1,5 +1,6 @@
 import { Prisma, Role } from "@prisma/client";
 import { prisma } from "../../config/prisma.js";
+import { monthDateRange, ymdToDateColumn } from "../../core/berlin.js";
 import { HttpError } from "../../middleware/errorHandler.js";
 import type { z } from "zod";
 import type {
@@ -16,17 +17,6 @@ type Actor = {
 type CreateInput = z.infer<typeof createSickDaySchema>;
 type ListQuery = z.infer<typeof listSickDaysQuerySchema>;
 
-function monthRangeUtc(year: number, month: number): { gte: Date; lt: Date } {
-  return {
-    gte: new Date(Date.UTC(year, month - 1, 1)),
-    lt: new Date(Date.UTC(year, month, 1)),
-  };
-}
-
-function dateOnlyUtc(d: Date): Date {
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-}
-
 function assertCanAccess(actor: Actor, rowEmployeeId: string) {
   if (actor.role === Role.EMPLOYEE && actor.employeeId !== rowEmployeeId) {
     throw new HttpError(403, "Forbidden");
@@ -34,7 +24,7 @@ function assertCanAccess(actor: Actor, rowEmployeeId: string) {
 }
 
 export async function listSickDays(query: ListQuery) {
-  const range = monthRangeUtc(query.year, query.month);
+  const range = monthDateRange(query.year, query.month);
   return prisma.sickDay.findMany({
     where: {
       employeeId: query.employeeId,
@@ -45,7 +35,7 @@ export async function listSickDays(query: ListQuery) {
 }
 
 export async function createSickDay(input: CreateInput) {
-  const date = dateOnlyUtc(input.date);
+  const date = ymdToDateColumn(input.date);
 
   try {
     return await prisma.$transaction(async (tx) => {
@@ -70,7 +60,6 @@ export async function createSickDay(input: CreateInput) {
         data: {
           employeeId: input.employeeId,
           date,
-          creditedHours: employee.hoursPerDay,
           note: input.note ?? null,
         },
       });
