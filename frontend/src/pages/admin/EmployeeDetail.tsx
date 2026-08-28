@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ApiError } from "../../api/client";
 import { getEmployee, updateEmployee } from "../../api/employees";
 import { deleteShift, listShiftsPage } from "../../api/shifts";
 import { deleteSickDay, listSickDays } from "../../api/sickDays";
@@ -17,6 +16,8 @@ import { ShiftList } from "../../components/ShiftList";
 import { StatsBlock } from "../../components/StatsBlock";
 import { useYearMonth } from "../../hooks/useYearMonth";
 import { calendarYmdFromIso } from "../../lib/datetime";
+import { apiErrorText } from "../../i18n/apiErrorText";
+import { useI18n } from "../../i18n/useI18n";
 import type {
   Employee,
   EmployeeStats,
@@ -31,6 +32,7 @@ import { btnPrimary, btnSecondary, inputClass } from "../../ui";
 type Tab = "profile" | "month" | "payouts";
 
 export default function EmployeeDetail() {
+  const { t } = useI18n();
   const { id } = useParams<{ id: string }>();
   const { year, month, setYearMonth } = useYearMonth();
   const [tab, setTab] = useState<Tab>("month");
@@ -102,11 +104,11 @@ export default function EmployeeDetail() {
       setShifts([]);
       setSickDays([]);
       setOvertimePayouts([]);
-      setError(err instanceof ApiError ? err.message : "Failed to load");
+      setError(apiErrorText(err, t, t("failedLoad")));
     } finally {
       if (!isCancelled?.()) setLoading(false);
     }
-  }, [id, year, month]);
+  }, [id, year, month, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -153,7 +155,7 @@ export default function EmployeeDetail() {
       setPassword("");
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Save failed");
+      setError(apiErrorText(err, t, t("saveFailed")));
     } finally {
       setPending(false);
     }
@@ -165,7 +167,7 @@ export default function EmployeeDetail() {
       await deleteShift(shiftId);
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Delete failed");
+      setError(apiErrorText(err, t, t("deleteFailed")));
     }
   }
 
@@ -175,7 +177,7 @@ export default function EmployeeDetail() {
       await deleteSickDay(sickId);
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Delete failed");
+      setError(apiErrorText(err, t, t("deleteFailed")));
     }
   }
 
@@ -197,7 +199,7 @@ export default function EmployeeDetail() {
       setOtNote("");
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Overtime payout failed");
+      setError(apiErrorText(err, t, "Overtime payout failed"));
     } finally {
       setOtPending(false);
     }
@@ -209,7 +211,7 @@ export default function EmployeeDetail() {
       await deleteOvertimePayout(id, payoutId);
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Delete failed");
+      setError(apiErrorText(err, t, t("deleteFailed")));
     }
   }
 

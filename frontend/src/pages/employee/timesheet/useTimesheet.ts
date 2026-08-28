@@ -5,6 +5,7 @@ import { createShift, deleteShift, listShifts, updateShift } from "../../../api/
 import { createSickDay, deleteSickDay, listSickDays } from "../../../api/sickDays";
 import { meStats } from "../../../api/stats";
 import { useToast } from "../../../components/useToast";
+import { apiErrorText } from "../../../i18n/apiErrorText";
 import { useI18n } from "../../../i18n/useI18n";
 import {
   berlinDateTimeToIso,
@@ -81,11 +82,11 @@ export function useTimesheet(employeeId: string | null, year: number, month: num
 
   const fail = useCallback(
     (err: unknown, fallback: string) => {
-      const text = err instanceof ApiError ? err.message : fallback;
+      const text = apiErrorText(err, t, fallback);
       toast.show(text);
       return text;
     },
-    [toast],
+    [t, toast],
   );
 
   const invalidate = useCallback(() => {
@@ -342,8 +343,9 @@ export function useTimesheet(employeeId: string | null, year: number, month: num
     createSickMut.isPending ||
     deleteSickMut.isPending;
 
-  const error =
-    query.error instanceof ApiError ? query.error.message : query.error ? t("failedLoad") : null;
+  const error = query.error
+    ? apiErrorText(query.error, t, t("failedLoad"))
+    : null;
 
   const onCancelEdit = useCallback(() => {
     setEditing(null);

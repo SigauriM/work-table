@@ -3,16 +3,19 @@ import type { AuthResponse } from "../types/api";
 
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  code?: string;
+  constructor(status: number, message: string, code?: string) {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 
 async function parseError(res: Response): Promise<ApiError> {
   try {
-    const body = (await res.json()) as { error?: string };
-    return new ApiError(res.status, body.error ?? res.statusText);
+    const body = (await res.json()) as { error?: string; code?: string };
+    const code = typeof body.code === "string" && body.code.length > 0 ? body.code : undefined;
+    return new ApiError(res.status, body.error ?? res.statusText, code);
   } catch {
     return new ApiError(res.status, res.statusText);
   }

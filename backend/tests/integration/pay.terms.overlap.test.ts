@@ -138,6 +138,7 @@ describe("salary, payouts, terms, parallel overlap", () => {
     if (statuses[1] === 409) {
       const denied = first.status === 409 ? first : second;
       expect(denied.body.error).toBe("Overlapping shift");
+      expect(denied.body.code).toBe("SHIFT_OVERLAP");
     }
   });
 });

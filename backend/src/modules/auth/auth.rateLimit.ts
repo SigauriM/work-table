@@ -1,5 +1,6 @@
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 import { rateLimit } from "express-rate-limit";
+import { errorPayload } from "../../middleware/errorHandler.js";
 import { readRefreshCookie } from "./auth.cookieRead.js";
 
 const TOO_MANY = "Too many requests";
@@ -24,7 +25,7 @@ export function loginAttemptKey(req: Request): string {
 }
 
 function tooMany(_req: Request, res: Response, _next: NextFunction) {
-  res.status(429).json({ error: TOO_MANY });
+  res.status(429).json(errorPayload(TOO_MANY, "TOO_MANY_REQUESTS"));
 }
 
 const validateOff = {

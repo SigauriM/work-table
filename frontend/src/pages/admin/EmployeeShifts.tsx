@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ApiError } from "../../api/client";
 import { getEmployee } from "../../api/employees";
 import { deleteShift, listShiftsPage } from "../../api/shifts";
 import { AppShell } from "../../components/AppShell";
 import { adminNav } from "../../components/nav";
 import { ShiftList } from "../../components/ShiftList";
+import { apiErrorText } from "../../i18n/apiErrorText";
+import { useI18n } from "../../i18n/useI18n";
 import type { Employee, Shift } from "../../types/api";
 import { btnSecondary } from "../../ui";
 
 export default function EmployeeShifts() {
+  const { t } = useI18n();
   const { id } = useParams<{ id: string }>();
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [shifts, setShifts] = useState<Shift[]>([]);
@@ -35,11 +37,11 @@ export default function EmployeeShifts() {
       setEmployee(null);
       setShifts([]);
       setNextCursor(null);
-      setError(err instanceof ApiError ? err.message : "Failed to load");
+      setError(apiErrorText(err, t, t("failedLoad")));
     } finally {
       if (!isCancelled?.()) setLoading(false);
     }
-  }, [id]);
+  }, [id, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -59,7 +61,7 @@ export default function EmployeeShifts() {
       await deleteShift(shiftId);
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Delete failed");
+      setError(apiErrorText(err, t, t("deleteFailed")));
     }
   }
 
@@ -71,7 +73,7 @@ export default function EmployeeShifts() {
       setShifts((prev) => [...prev, ...page.items]);
       setNextCursor(page.nextCursor);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load");
+      setError(apiErrorText(err, t, t("failedLoad")));
     } finally {
       setLoadingMore(false);
     }

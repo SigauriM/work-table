@@ -1,10 +1,12 @@
 import { useState, type FormEvent } from "react";
-import { ApiError } from "../api/client";
 import { useAuth } from "../auth/useAuth";
+import { apiErrorText } from "../i18n/apiErrorText";
+import { useI18n } from "../i18n/useI18n";
 import { btnPrimary, inputClass } from "../ui";
 
 export default function ChangePasswordPage() {
   const { changePassword, logout } = useAuth();
+  const { t } = useI18n();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -17,11 +19,7 @@ export default function ChangePasswordPage() {
     try {
       await changePassword(currentPassword, newPassword);
     } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError("Something went wrong");
-      }
+      setError(apiErrorText(err, t));
     } finally {
       setPending(false);
     }

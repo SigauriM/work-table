@@ -6,18 +6,20 @@ import cookieParser from "cookie-parser";
 import cors from "cors";
 import express from "express";
 import helmet from "helmet";
+import { env } from "./config/env.js";
 import { prisma } from "./config/prisma.js";
 import { errorHandler } from "./middleware/errorHandler.js";
+import { auditRouter } from "./modules/audit/audit.routes.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
 import { employeesRouter } from "./modules/employees/employees.routes.js";
 
 export const app = express();
-if (process.env.NODE_ENV === "production") {
+if (process.env.NODE_ENV !== "test") {
   app.use(helmet({ contentSecurityPolicy: false }));
 }
 app.use(
   cors({
-    origin: ["http://localhost:5173", "http://127.0.0.1:5173"],
+    origin: env.corsOrigins,
     credentials: true,
   }),
 );
@@ -35,6 +37,7 @@ app.get("/health", async (_req, res) => {
 
 const apiV1 = express.Router();
 apiV1.use("/auth", authRouter);
+apiV1.use("/audit", auditRouter);
 apiV1.use("/employees", employeesRouter);
 apiV1.use("/shifts", shiftsRouter);
 apiV1.use("/sick-days", sickdaysRouter);

@@ -75,8 +75,16 @@ those three. See `frontend/src/pwa.ts` and `refresh()` in
 `Secure` is `COOKIE_SECURE` (default false). Dev and phone over HTTP need it
 false or the browser will not store the cookie.
 
+The SPA calls `/api` on the Vite origin (proxy to Express). That is same-origin
+for the browser. If the page origin is a LAN host and the browser talks to
+`:3000` directly, put that exact origin in `CORS_ORIGINS` (see `.env.example`).
+Do not use `*`.
+
 ## Audit log (v1)
 
 `AuditLog` is append-only. A `BEFORE UPDATE OR DELETE` trigger raises on any
 change, including by the same database user the app uses (`DATABASE_URL` =
 `POSTGRES_USER`). A separate application role is not in v1.
+
+Only an admin can read the log (`GET /api/v1/audit`). There is no per-employee
+audit view in v1.

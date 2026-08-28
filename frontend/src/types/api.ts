@@ -15,6 +15,7 @@ export type AuthResponse = {
 
 export type ApiErrorBody = {
   error: string;
+  code?: string;
 };
 
 export type PayType = "HOURLY" | "SALARY";
@@ -93,6 +94,25 @@ export type OverviewRow = {
   workedHours: string;
   balance: string;
   monthlyPay: string;
+};
+
+export type AuditEntity = "Shift" | "Employee" | "User" | "OvertimePayout";
+
+export type AuditLogItem = {
+  id: string;
+  createdAt: string;
+  actorUserId: string;
+  actorLogin: string | null;
+  action: string;
+  entity: string;
+  entityId: string;
+  before: unknown;
+  after: unknown;
+};
+
+export type AuditLogPage = {
+  items: AuditLogItem[];
+  nextCursor: string | null;
 };
 
 export type CreateEmployeeBody = {

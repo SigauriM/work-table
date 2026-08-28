@@ -170,6 +170,7 @@ describe("auth and access boundaries", () => {
       .send({ employeeId: empA.id, ...dayShift("2026-03-02", "10:00", "12:00") });
     expect(second.status).toBe(409);
     expect(second.body.error).toBe("Overlapping shift");
+    expect(second.body.code).toBe("SHIFT_OVERLAP");
   });
 
   it("self password change clears the flag and revokes other refresh cookies", async () => {

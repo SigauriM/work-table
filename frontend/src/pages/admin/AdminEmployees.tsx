@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { ApiError } from "../../api/client";
 import {
   createEmployee,
   deactivateEmployee,
@@ -8,6 +7,8 @@ import {
 } from "../../api/employees";
 import { AppShell } from "../../components/AppShell";
 import { adminNav } from "../../components/nav";
+import { apiErrorText } from "../../i18n/apiErrorText";
+import { useI18n } from "../../i18n/useI18n";
 import type { CreateEmployeeBody, Employee, PayType } from "../../types/api";
 import { btnPrimary, btnSecondary, inputClass } from "../../ui";
 
@@ -38,6 +39,7 @@ const emptyCreate: CreateForm = {
 };
 
 export default function AdminEmployees() {
+  const { t } = useI18n();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -68,11 +70,11 @@ export default function AdminEmployees() {
     } catch (err) {
       if (isCancelled?.()) return;
       setEmployees([]);
-      setError(err instanceof ApiError ? err.message : "Failed to load");
+      setError(apiErrorText(err, t, t("failedLoad")));
     } finally {
       if (!isCancelled?.()) setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -121,7 +123,7 @@ export default function AdminEmployees() {
       setCreateOpen(false);
       await load();
     } catch (err) {
-      setCreateError(err instanceof ApiError ? err.message : "Create failed");
+      setCreateError(apiErrorText(err, t, "Create failed"));
     } finally {
       setCreatePending(false);
     }
@@ -134,7 +136,7 @@ export default function AdminEmployees() {
       await deactivateEmployee(id);
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Deactivate failed");
+      setError(apiErrorText(err, t, "Deactivate failed"));
     }
   }
 

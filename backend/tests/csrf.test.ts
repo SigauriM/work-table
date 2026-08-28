@@ -24,7 +24,7 @@ describe("requireCsrf", () => {
       .post("/refresh")
       .set("Cookie", "csrf=secret-token");
     expect(res.status).toBe(403);
-    expect(res.body).toEqual({ error: "Forbidden" });
+    expect(res.body).toEqual({ error: "Forbidden", code: "FORBIDDEN" });
   });
 
   it("rejects refresh when header and cookie differ", async () => {

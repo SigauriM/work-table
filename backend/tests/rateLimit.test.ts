@@ -34,7 +34,10 @@ describe("login rate limit", () => {
     }
     const blocked = await request(app).post("/login").send({ login: "anna", password: "x" });
     expect(blocked.status).toBe(429);
-    expect(blocked.body).toEqual({ error: "Too many requests" });
+    expect(blocked.body).toEqual({
+      error: "Too many requests",
+      code: "TOO_MANY_REQUESTS",
+    });
   });
 
   it("does not share the limit across different logins on the same IP", async () => {
@@ -89,7 +92,10 @@ describe("refresh rate limit", () => {
     }
     const blocked = await request(app).post("/refresh").set("Cookie", "refresh=same-id.secret");
     expect(blocked.status).toBe(429);
-    expect(blocked.body).toEqual({ error: "Too many requests" });
+    expect(blocked.body).toEqual({
+      error: "Too many requests",
+      code: "TOO_MANY_REQUESTS",
+    });
   });
 
   it("does not apply the login 5/15min ceiling to junk refresh cookies", async () => {

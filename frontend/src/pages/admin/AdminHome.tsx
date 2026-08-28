@@ -1,18 +1,24 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { ApiError } from "../../api/client";
+import { listAudit } from "../../api/audit";
 import { statsOverview } from "../../api/stats";
 import { AppShell } from "../../components/AppShell";
 import { adminNav } from "../../components/nav";
 import { MonthPicker } from "../../components/MonthPicker";
 import { useYearMonth } from "../../hooks/useYearMonth";
-import type { OverviewRow } from "../../types/api";
+import { apiErrorText } from "../../i18n/apiErrorText";
+import { useI18n } from "../../i18n/useI18n";
+import type { AuditLogItem, OverviewRow } from "../../types/api";
 
 export default function AdminHome() {
+  const { t } = useI18n();
   const { year, month, setYearMonth } = useYearMonth();
   const [overview, setOverview] = useState<OverviewRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [audit, setAudit] = useState<AuditLogItem[]>([]);
+  const [auditLoading, setAuditLoading] = useState(true);
+  const [auditError, setAuditError] = useState<string | null>(null);
 
   const load = useCallback(async (isCancelled?: () => boolean) => {
     try {
@@ -23,11 +29,11 @@ export default function AdminHome() {
     } catch (err) {
       if (isCancelled?.()) return;
       setOverview([]);
-      setError(err instanceof ApiError ? err.message : "Failed to load");
+      setError(apiErrorText(err, t, t("failedLoad")));
     } finally {
       if (!isCancelled?.()) setLoading(false);
     }
-  }, [year, month]);
+  }, [year, month, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -40,6 +46,27 @@ export default function AdminHome() {
       cancelled = true;
     };
   }, [load]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const page = await listAudit();
+        if (cancelled) return;
+        setAudit(page.items);
+        setAuditError(null);
+      } catch (err) {
+        if (cancelled) return;
+        setAudit([]);
+        setAuditError(apiErrorText(err, t, t("failedLoad")));
+      } finally {
+        if (!cancelled) setAuditLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [t]);
 
   const empty = overview.length === 0 && !loading;
 
@@ -115,6 +142,35 @@ export default function AdminHome() {
             </tbody>
           </table>
         </div>
+      </section>
+
+      <section className="flex flex-col gap-2">
+        <h2 className="text-lg font-medium">Audit</h2>
+        {auditError ? (
+          <p className="text-sm text-red-700" role="alert">
+            {auditError}
+          </p>
+        ) : null}
+        {auditLoading ? <p className="text-sm text-neutral-500">Loading…</p> : null}
+        {!auditLoading && audit.length === 0 && !auditError ? (
+          <p className="text-sm text-neutral-500">No audit events</p>
+        ) : null}
+        <ul className="flex flex-col gap-2">
+          {audit.map((row) => (
+            <li
+              key={row.id}
+              className="rounded border border-neutral-200 bg-white p-3 text-sm"
+            >
+              <div className="font-medium">
+                {row.action} · {row.entity}
+              </div>
+              <div className="text-neutral-600">
+                {row.actorLogin ?? row.actorUserId} · {row.createdAt}
+              </div>
+              <div className="break-all text-neutral-500">{row.entityId}</div>
+            </li>
+          ))}
+        </ul>
       </section>
     </AppShell>
   );

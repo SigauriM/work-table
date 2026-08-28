@@ -64,6 +64,51 @@ describe("audit, closed months, stable terms ids", () => {
     expect(logs.length).toBeGreaterThanOrEqual(1);
   });
 
+  it("admin GET /audit sees the shift update; employee is 403", async () => {
+    const admin = await login(ADMIN_LOGIN, ADMIN_PASSWORD);
+    const empA = await createEmployee(admin.accessToken, "inta");
+    const a = await login("inta", EMP_PASSWORD);
+    const closedYmd = closedMonthMidYmd();
+
+    const created = await request(app)
+      .post("/api/v1/shifts")
+      .set(auth(a.accessToken))
+      .send({ employeeId: empA.id, ...dayShift(closedYmd, "09:00", "17:00") });
+    expect(created.status).toBe(201);
+
+    const allowed = await request(app)
+      .patch(`/api/v1/shifts/${created.body.id}`)
+      .set(auth(admin.accessToken))
+      .send({ note: "admin edit" });
+    expect(allowed.status).toBe(200);
+
+    const listed = await request(app)
+      .get("/api/v1/audit")
+      .query({ entity: "Shift", entityId: created.body.id })
+      .set(auth(admin.accessToken));
+    expect(listed.status).toBe(200);
+    expect(listed.body.nextCursor === null || typeof listed.body.nextCursor === "string").toBe(
+      true,
+    );
+    const update = listed.body.items.find(
+      (row: { action: string; entityId: string }) =>
+        row.action === "shift.update" && row.entityId === created.body.id,
+    );
+    expect(update).toBeTruthy();
+    expect(update).toMatchObject({
+      entity: "Shift",
+      entityId: created.body.id,
+      action: "shift.update",
+      actorLogin: ADMIN_LOGIN,
+    });
+    expect(update!.before).toBeTruthy();
+    expect(update!.after).toBeTruthy();
+
+    const denied = await request(app).get("/api/v1/audit").set(auth(a.accessToken));
+    expect(denied.status).toBe(403);
+    expect(denied.body.error).toBe("Forbidden");
+  });
+
   it("UPDATE and DELETE on AuditLog fail under the same DATABASE_URL", async () => {
     const admin = await login(ADMIN_LOGIN, ADMIN_PASSWORD);
     const empA = await createEmployee(admin.accessToken, "inta");

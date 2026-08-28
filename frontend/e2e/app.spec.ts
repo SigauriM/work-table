@@ -67,6 +67,8 @@ test.describe("wave 9 journeys", () => {
     await expect(page.getByRole("row", { name: new RegExp(loginName) }).getByText("inactive")).toBeVisible();
     await signOut(page);
     await signIn(page, loginName, EMP_PASSWORD);
-    await expect(page.getByRole("alert")).toContainText("Invalid credentials");
+    await expect(page.getByRole("alert")).toContainText(
+      /Invalid credentials|Ungültige Zugangsdaten/,
+    );
   });
 });

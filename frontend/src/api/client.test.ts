@@ -93,4 +93,17 @@ describe("apiFetch refresh", () => {
 
     await expect(apiFetch("/api/v1/me/stats")).rejects.toBeInstanceOf(ApiError);
   });
+
+  it("keeps code from a 409 body", async () => {
+    setAccessToken("access");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse(409, { error: "Overlapping shift", code: "SHIFT_OVERLAP" })),
+    );
+    await expect(apiFetch("/api/v1/shifts")).rejects.toMatchObject({
+      status: 409,
+      message: "Overlapping shift",
+      code: "SHIFT_OVERLAP",
+    });
+  });
 });

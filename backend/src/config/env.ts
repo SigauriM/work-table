@@ -1,3 +1,5 @@
+import { parseCorsOrigins } from "./corsOrigins.js";
+
 function required(name: string): string {
   const value = process.env[name];
   if (!value) {
@@ -13,4 +15,5 @@ export const env = {
   jwtAccessExpires: process.env.JWT_ACCESS_EXPIRES ?? "15m",
   jwtRefreshDays: Number(process.env.JWT_REFRESH_DAYS ?? 7),
   cookieSecure: process.env.COOKIE_SECURE === "true",
+  corsOrigins: parseCorsOrigins(process.env.CORS_ORIGINS),
 };

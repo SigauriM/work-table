@@ -121,4 +121,7 @@ model AuditLog {
   before      Json?
   after       Json?
   createdAt   DateTime @default(now())
+
+  @@index([entity, entityId, createdAt])
+  @@index([createdAt])
 }
